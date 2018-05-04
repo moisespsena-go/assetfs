@@ -6,9 +6,9 @@ import (
 )
 
 type AssetGetter struct {
-	AssetFunc func(path string) ([]byte, error)
+	AssetFunc     func(path string) ([]byte, error)
 	AssetInfoFunc func(path string) (os.FileInfo, error)
-	GlobFunc  GlobFunc
+	GlobFunc      GlobFunc
 }
 
 func (f *AssetGetter) Asset(path string) (AssetInterface, error) {
@@ -54,4 +54,3 @@ func (f *AssetGetter) GlobOrPanic(pattern string, recursive ...bool) []string {
 func (f *AssetGetter) AssetReader() AssetReaderFunc {
 	return f.AssetFunc
 }
-

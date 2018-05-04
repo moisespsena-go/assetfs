@@ -1,8 +1,8 @@
 package assetfs
 
 import (
-	"path/filepath"
 	"os"
+	"path/filepath"
 )
 
 // Glob list matched files from assetfs

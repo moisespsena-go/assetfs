@@ -1,13 +1,13 @@
 package assetfs
 
 import (
-	"strings"
 	"fmt"
-	"crypto/md5"
 	"mime"
-	"path/filepath"
-	"net/http"
 	"time"
+	"strings"
+	"net/http"
+	"crypto/md5"
+	"path/filepath"
 )
 
 var cacheSince = time.Now().Format(http.TimeFormat)

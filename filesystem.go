@@ -4,10 +4,10 @@ import (
 	"os"
 	"fmt"
 	"errors"
+	"net/http"
 	"path/filepath"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/moisespsena/go-assetfs/repository"
-	"net/http"
 )
 
 // AssetFileSystem AssetFS based on FileSystem
@@ -206,7 +206,7 @@ func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*path_helpers.Path) 
 		fspath = "."
 	}
 	for _, pth := range fs.paths {
-		p = append(p, &path_helpers.Path{Real:pth, Alias:fspath})
+		p = append(p, &path_helpers.Path{Real: pth, Alias: fspath})
 	}
 	if rec && fs.nameSpaces != nil {
 		for _, ns := range fs.nameSpaces {

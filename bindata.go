@@ -1,9 +1,9 @@
 package assetfs
 
 import (
-	"path/filepath"
 	"os"
 	"net/http"
+	"path/filepath"
 )
 
 type BindataFileSystem struct {

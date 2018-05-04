@@ -1,10 +1,10 @@
 package assetfs
 
 import (
-	"path/filepath"
-	"strings"
 	"os"
+	"strings"
 	"io/ioutil"
+	"path/filepath"
 )
 
 // Glob list matched files from assetfs
@@ -99,4 +99,3 @@ func filesystemAssetInfo(fs *AssetFileSystem, path string) (info os.FileInfo, er
 	}
 	return nil, NotFound(path)
 }
-

@@ -1,8 +1,8 @@
 package assetfs
 
 import (
-	"fmt"
 	"os"
+	"fmt"
 )
 
 type AssetError struct {

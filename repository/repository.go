@@ -9,65 +9,39 @@ import (
 	"github.com/jteeuwen/go-bindata"
 	"github.com/moisespsena/go-path-helpers"
 	"github.com/moisespsena/go-assetfs/repository/templates"
+	"github.com/moisespsena/go-assetfs/repository/api"
+	"io"
 )
 
-type PreSourceAddFunc = func(repo Interface, src interface{}) interface{}
-type AfterSourceAddFunc = func(repo Interface, src interface{})
-
-type PluginInterface interface {
-	GetTemplates() []*Template
-	Init(repo Interface)
-}
-
-type Interface interface {
-	AddSource(sources ...interface{})
-	AddSourcePath(sources ...*path_helpers.Path)
-	BinFile() string
-	AbsPath(create ...bool) string
-	DataDir(create ...bool) string
-	Init()
-	Sync()
-	Clean()
-	RegisterPlugin(plugins ...PluginInterface)
-	PreSourceAdd(cbcs ...PreSourceAddFunc)
-	AfterSourceAdd(cbcs ...AfterSourceAddFunc)
-	PreSync(cbcs ...func(repo Interface))
-	AfterSync(cbcs ...func(repo Interface))
-	PreClean(cbcs ...func(repo Interface))
-	AfterClean(cbcs ...func(repo Interface))
-}
+type Template = api.Template
 
 type Repository struct {
-	PackagePath          string
-	Package              string
-	PreCompileTag        string
-	CleanTag             string
-	BindataTag           string
-	Templates            []*Template
-	PrepareConfig        func(config *bindata.Config)
-	Sources              []interface{}
-	sources              map[interface{}]int
-	absPath              string
-	Plugins              []PluginInterface
-	preSourceAdd         []PreSourceAddFunc
-	afterSourceAdd       []AfterSourceAddFunc
-	preClean             []func(repo Interface)
-	afterClean           []func(repo Interface)
-	preSync              []func(repo Interface)
-	afterSync            []func(repo Interface)
-}
-
-type Template struct {
-	Name string
-	Data string
+	PackagePath       string
+	Package           string
+	BindataCompileTag string
+	BindataCleanTag   string
+	BindataTag        string
+	Templates         []*Template
+	PrepareConfig     func(config *bindata.Config)
+	Sources           []interface{}
+	sources           map[interface{}]int
+	absPath           string
+	Plugins           []api.Plugin
+	preSourceAdd      []api.PreSourceAddFunc
+	afterSourceAdd    []api.AfterSourceAddFunc
+	preClean          []func(repo api.Interface)
+	afterClean        []func(repo api.Interface)
+	preSync           []func(repo api.Interface)
+	afterSync         []func(repo api.Interface)
+	dumpers           []api.Dumper
 }
 
 func NewRepository(packagePath string) *Repository {
 	return &Repository{PackagePath: packagePath, Package: filepath.Base(packagePath),
-		PreCompileTag: "pre_compile", BindataTag: "bindata", CleanTag: "bindata_clean"}
+		BindataCompileTag: "assetfs_bindataCompile", BindataTag: "assetfs_bindata", BindataCleanTag: "assetfs_bindataClean"}
 }
 
-func (r *Repository) RegisterPlugin(plugins ...PluginInterface) {
+func (r *Repository) RegisterPlugin(plugins ...api.Plugin) {
 	r.Plugins = append(r.Plugins, plugins...)
 }
 
@@ -105,7 +79,11 @@ func (r *Repository) AbsPath(create ...bool) string {
 		if absPath := path_helpers.ResolveGoSrcPath(filepath.Dir(r.PackagePath)); absPath != "" {
 			absPath = filepath.Join(absPath, filepath.Base(r.PackagePath))
 			if (len(create) != 0 && create[0]) && !path_helpers.IsExistingDir(absPath) {
-				if err := os.MkdirAll(absPath, os.ModePerm); err != nil {
+				perms, err := path_helpers.ResolvPerms(absPath)
+				if err != nil {
+					panic(fmt.Errorf("Error on resolv mode: %v", err))
+				}
+				if err := os.MkdirAll(absPath, os.FileMode(perms)); err != nil {
 					panic(err)
 				}
 			}
@@ -118,7 +96,11 @@ func (r *Repository) AbsPath(create ...bool) string {
 func (r *Repository) DataDir(create ...bool) string {
 	absPath := filepath.Join(r.AbsPath(create...), "data")
 	if (len(create) != 0 && create[0]) && !path_helpers.IsExistingDir(absPath) {
-		if err := os.MkdirAll(absPath, os.ModePerm); err != nil {
+		perms, err := path_helpers.ResolvPerms(absPath)
+		if err != nil {
+			panic(fmt.Errorf("Error on resolv mode: %v", err))
+		}
+		if err := os.MkdirAll(absPath, os.FileMode(perms)); err != nil {
 			panic(err)
 		}
 	}
@@ -145,11 +127,11 @@ func (r *Repository) template(tpl *Template) interface{} {
 func (r *Repository) GetInitTempĺates() []*Template {
 	tpls := r.Templates[:]
 	tpls = append(tpls,
-		&Template{"repository.go", templates.Repository()},
-		&Template{"assetfsfs.go", templates.FS()},
-		&Template{"assetfsfs_bindata.go", templates.FSBindata()},
-		&Template{"assetfsprecompile.go", templates.PreCompile()},
-		&Template{"assetfsclean.go", templates.Clean()})
+		&Template{"assetfs.go", templates.FS()},
+		&Template{"assetfsCommon.go", templates.Common()},
+		&Template{"assetfsBindata.go", templates.FSBindata()},
+		&Template{"assetfsBindataCompile.go", templates.PreCompile()},
+		&Template{"assetfsBindataClean.go", templates.Clean()})
 
 	for _, p := range r.Plugins {
 		tpls = append(tpls, p.GetTemplates()...)
@@ -181,7 +163,7 @@ func (r *Repository) InitWithTemplates(tpls []*Template) {
 
 func (r *Repository) Init() {
 	r.InitWithTemplates(r.GetInitTempĺates())
-	for _,p := range r.Plugins {
+	for _, p := range r.Plugins {
 		p.Init(r)
 	}
 }
@@ -195,6 +177,37 @@ func (r *Repository) Sync() {
 	if err := path_helpers.CopyTree(sdest, r.Sources); err != nil {
 		panic(err)
 	}
+
+	var err error
+
+	for i, dump := range r.dumpers {
+		err = dump(func(pth string, stat os.FileInfo, reader io.Reader) error {
+			opath := filepath.Join(sdest, pth)
+			if stat.IsDir() {
+				if !path_helpers.IsExistingDir(opath) {
+					err := os.MkdirAll(opath, stat.Mode())
+					if err != nil {
+						return fmt.Errorf("Sync: Dump[%v] mkdir %q: %v", i, pth, err)
+					}
+				}
+				return nil
+			}
+			writer, err := os.Create(opath)
+			if err != nil {
+				return fmt.Errorf("Sync: Dump[%v] create %q: %v", i, pth, err)
+			}
+			defer writer.Close()
+			_, err = io.Copy(writer, reader)
+			if err != nil {
+				return fmt.Errorf("Sync: Dump[%v] copy %q to %q: %v", i, pth, opath, err)
+			}
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	config := bindata.NewConfig()
 	config.Input = []bindata.InputConfig{
 		{
@@ -235,21 +248,24 @@ func (r *Repository) Clean() {
 	}
 }
 
-func (r *Repository) PreSourceAdd(cbcs ...PreSourceAddFunc) {
+func (r *Repository) PreSourceAdd(cbcs ...api.PreSourceAddFunc) {
 	r.preSourceAdd = append(r.preSourceAdd, cbcs...)
 }
-func (r *Repository) AfterSourceAdd(cbcs ...AfterSourceAddFunc) {
+func (r *Repository) AfterSourceAdd(cbcs ...api.AfterSourceAddFunc) {
 	r.afterSourceAdd = append(r.afterSourceAdd, cbcs...)
 }
-func (r *Repository) PreSync(cbcs ...func(repo Interface)) {
+func (r *Repository) PreSync(cbcs ...func(repo api.Interface)) {
 	r.preSync = append(r.preSync, cbcs...)
 }
-func (r *Repository) AfterSync(cbcs ...func(repo Interface)) {
+func (r *Repository) AfterSync(cbcs ...func(repo api.Interface)) {
 	r.afterSync = append(r.afterSync, cbcs...)
 }
-func (r *Repository) PreClean(cbcs ...func(repo Interface)) {
+func (r *Repository) PreClean(cbcs ...func(repo api.Interface)) {
 	r.preClean = append(r.preClean, cbcs...)
 }
-func (r *Repository) AfterClean(cbcs ...func(repo Interface)) {
+func (r *Repository) AfterClean(cbcs ...func(repo api.Interface)) {
 	r.afterClean = append(r.afterClean, cbcs...)
+}
+func (r *Repository) Dumper(dumpers ...api.Dumper) {
+	r.dumpers = append(r.dumpers, dumpers...)
 }

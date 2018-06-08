@@ -1,4 +1,4 @@
-package assetfs
+package api
 
 import (
 	"os"

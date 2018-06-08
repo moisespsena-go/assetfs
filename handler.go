@@ -8,11 +8,12 @@ import (
 	"net/http"
 	"crypto/md5"
 	"path/filepath"
+	"github.com/moisespsena/go-assetfs/api"
 )
 
 var cacheSince = time.Now().Format(http.TimeFormat)
 
-func HTTPStaticHandler(fs Interface) http.Handler {
+func HTTPStaticHandler(fs api.Interface) http.Handler {
 	fspath := strings.Replace(fs.GetPath(), "\\", "/", -1)
 	if fspath != "" {
 		fspath = "/" + fspath

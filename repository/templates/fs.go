@@ -7,11 +7,12 @@ package {{.Package}}
 
 import (
 	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-assetfs/api"
 )
 
 var (
-	FileSystem                   = assetfs.NewAssetFileSystem()
-	AssetFS    assetfs.Interface = FileSystem
+	FileSystem               = assetfs.NewAssetFileSystem()
+	AssetFS    api.Interface = FileSystem
 )
 `
 }
@@ -22,52 +23,22 @@ func FSBindata() string {
 package {{.Package}}
 
 import (
-	"C"
 	"os"
 	"fmt"
 	"time"
 	"strings"
-	_ "unsafe"
 	"path/filepath"
 	"github.com/moisespsena/go-assetfs"
-
+	"github.com/moisespsena/go-assetfs/api"
 )
 
 var (
-	now = time.Now()
-	AssetFS assetfs.Interface = assetfs.NewBindataFileSystem(Asset, AssetInfo, AssetWalk, AssetWalkInfo, AssetGlob)
+	now                   = time.Now()
+	AssetFS api.Interface = assetfs.NewBindataFileSystem(Asset, GetAssetInfo, AssetWalk, AssetWalkInfo, AssetGlob, AssetGlobInfo)
 )
 
-type bindataDirInfo struct {
-	name    string
-}
-
-func (fi bindataDirInfo) Name() string {
-	return fi.name
-}
-
-func (fi bindataDirInfo) Size() int64 {
-	return -1
-}
-
-func (fi bindataDirInfo) Mode() os.FileMode {
-	return os.ModeDir
-}
-
-func (fi bindataDirInfo) ModTime() time.Time {
-	return now
-}
-
-func (fi bindataDirInfo) IsDir() bool {
-	return true
-}
-
-func (fi bindataDirInfo) Sys() interface{} {
-	return nil
-}
-
-func AssetWalk(name string, cb assetfs.WalkFunc) (error) {
-	node, err := AssetGetDir(name)
+func AssetWalk(root string, cb api.CbWalkFunc) (error) {
+	node, err := AssetGetDir(root)
 	if err != nil {
 		return err
 	}
@@ -76,9 +47,13 @@ func AssetWalk(name string, cb assetfs.WalkFunc) (error) {
 	walk = func(pth string, node *bintree) (err error) {
 		for childName, child := range node.Children {
 			if child.Func == nil {
+				err = cb(filepath.Join(pth, childName), true)
+				if err != nil {
+					return err
+				}
 				err = walk(filepath.Join(pth, childName), child)
 			} else {
-				err = cb("", filepath.Join(pth, childName), nil)
+				err = cb(filepath.Join(pth, childName), false)
 			}
 			if err != nil {
 				return err
@@ -86,11 +61,70 @@ func AssetWalk(name string, cb assetfs.WalkFunc) (error) {
 		}
 		return
 	}
-	return walk(name, node)
+	return walk(root, node)
 }
 
-func AssetWalkInfo(name string, cb assetfs.WalkInfoFunc) (error) {
-	node, err := AssetGetDir(name)
+func newAssetFileInfo(assetFunc func() (*asset, error), pth string) api.FileInfo {
+	info := bindataFileInfo{name: filepath.Base(pth), size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	return assetfs.NewBindataFileInfo(info, pth, func() ([]byte, error) {
+		asset, err := assetFunc()
+		if err != nil {
+			return nil, err
+		}
+		return asset.bytes, nil
+	})
+}
+
+func assetFileInfo(pth string) api.FileInfo {
+	if assetFunc, ok := _bindata[pth]; ok {
+		return newAssetFileInfo(assetFunc, pth)
+	}
+	return nil
+}
+
+func GetAssetInfo(pth string) (api.FileInfo, error) {
+	return getAssetInfo(pth, nil)
+}
+
+func getAssetInfo(pth string, node *bintree) (info api.FileInfo, err error) {
+	if node == nil {
+		info := assetFileInfo(pth)
+		if info != nil {
+			return info, nil
+		}
+		node, err = AssetGetDir(pth)
+		if err != nil {
+			return nil, err
+		}
+	} else if node.Func != nil {
+		info := assetFileInfo(pth)
+		if info == nil {
+			return nil, api.NotFound(pth)
+		}
+		return info, nil
+	}
+	return assetfs.NewBindataDirInfo(pth, childrenInfo(node, pth)), nil
+}
+
+func childrenInfo(node *bintree, pth string) func(cb func(info api.FileInfo) error) error {
+	return func(cb func(info api.FileInfo) error) error {
+		var pth string
+		for childName, child := range node.Children {
+			info, err := getAssetInfo(filepath.Join(pth, childName), child)
+			if err != nil {
+				return err
+			}
+			err = cb(info)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+func AssetWalkInfo(root string, cb api.CbWalkInfoFunc) (error) {
+	node, err := AssetGetDir(root)
 	if err != nil {
 		return err
 	}
@@ -98,21 +132,18 @@ func AssetWalkInfo(name string, cb assetfs.WalkInfoFunc) (error) {
 	var walk func(name string, node *bintree) error
 	walk = func(pth string, node *bintree) (err error) {
 		for childName, child := range node.Children {
+			cpth := filepath.Join(pth, childName)
+			var info api.FileInfo
 			if child.Func == nil {
-				info := &bindataDirInfo{childName}
-				cpth := filepath.Join(pth, childName)
-				err = cb("", cpth, info, nil)
+				info = assetfs.NewBindataDirInfo(cpth, childrenInfo(child, cpth))
+				err = cb(info)
 				if err != nil {
 					return
 				}
 				err = walk(cpth, child)
 			} else {
-				var asset *asset
-				asset, err = child.Func()
-				if err != nil {
-					return
-				}
-				err = cb("", filepath.Join(pth, childName), asset.info, nil)
+				info = newAssetFileInfo(child.Func, cpth)
+				err = cb(info)
 			}
 			if err != nil {
 				return err
@@ -120,7 +151,7 @@ func AssetWalkInfo(name string, cb assetfs.WalkInfoFunc) (error) {
 		}
 		return
 	}
-	return walk(name, node)
+	return walk(root, node)
 }
 
 func AssetGetDir(name string) (*bintree, error) {
@@ -142,82 +173,41 @@ func AssetGetDir(name string) (*bintree, error) {
 	return node, nil
 }
 
-func AssetGlob(pattern string, recursive ...bool) (matches []string, err error) {
-	rec := len(recursive) > 0 && recursive[0]
-	if !filepath_hasMeta(pattern) {
-		if _, ok := _bindata[pattern]; !ok {
-			_, err = AssetGetDir(pattern)
-			if err != nil {
-				return nil, nil
+func AssetGlob(pattern api.GlobPattern, cb func(pth string, isDir bool) error) (err error) {
+	if pattern.IsRecursive() {
+		err = AssetWalk(pattern.Dir(), func(pth string, isDir bool) error {
+			if isDir {
+				if !pattern.AllowDirs() {
+					return err
+				}
+			} else {
+				if !pattern.AllowFiles() {
+					return err
+				}
 			}
-		}
-		return []string{pattern}, nil
-	}
-
-	dir, file := filepath.Split(pattern)
-	dir = cleanGlobPath(dir)
-
-	if !filepath_hasMeta(dir) {
-		return glob(dir, file, nil, rec)
-	}
-
-	// Prevent infinite recursion. See issue 15879.
-	if dir == pattern {
-		return nil, filepath.ErrBadPattern
-	}
-
-	var m []string
-	m, err = AssetGlob(dir)
-	if err != nil {
-		return
-	}
-	for _, d := range m {
-		matches, err = glob(d, file, matches, rec)
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func glob(dir, pattern string, matches []string, recursive bool) (m []string, e error) {
-	m = matches
-	if recursive {
-		if dir == "" {
-			e = AssetWalk(dir, func(prefix, name string, err error) error {
-				matched, err := filepath.Match(pattern, filepath.Base(name))
-				if err != nil {
-					return err
-				}
-				if matched {
-					m = append(m, name)
-				}
-				return nil
-			})
-		} else {
-			e = AssetWalk(dir, func(prefix, name string, err error) error {
-				if strings.HasPrefix(name, dir + "/") {
-					matched, err := filepath.Match(pattern, filepath.Base(name))
-					if err != nil {
-						return err
-					}
-					if matched {
-						m = append(m, name)
-					}
-				}
-				return nil
-			})
-		}
+			if pattern.Match(filepath.Base(pth)) {
+				return cb(pth, false)
+			}
+			return nil
+		})
 	} else {
-		e = AssetWalk(dir, func(prefix, name string, err error) error {
-			if filepath.Dir(name) == dir {
-				matched, err := filepath.Match(pattern, filepath.Base(name))
-				if err != nil {
+		node, err := AssetGetDir(pattern.Dir())
+		if err != nil {
+			return err
+		}
+		info := assetfs.NewBindataDirInfo(pattern.Dir(), childrenInfo(node, pattern.Dir()))
+		err = info.ReadDir(func(info api.FileInfo) error {
+			if info.IsDir() {
+				if !pattern.AllowDirs() {
 					return err
 				}
-				if matched {
-					m = append(m, name)
+			} else {
+				if !pattern.AllowFiles() {
+					return err
 				}
+			}
+			if pattern.Match(info.Name()) {
+				return cb(info.Path(), info.IsDir())
 			}
 			return nil
 		})
@@ -225,17 +215,45 @@ func glob(dir, pattern string, matches []string, recursive bool) (m []string, e 
 	return
 }
 
-//go:linkname filepath_cleanGlobPath path/filepath.cleanGlobPath
-func filepath_cleanGlobPath(path string) string
-
-//go:linkname filepath_hasMeta path/filepath.hasMeta
-func filepath_hasMeta(path string) bool
-
-func cleanGlobPath(path string) string {
-	if path == "" {
-		return ""
+func AssetGlobInfo(pattern api.GlobPattern, cb func(info api.FileInfo) error) (err error) {
+	if pattern.IsRecursive() {
+		err = AssetWalkInfo(pattern.Dir(), func(info api.FileInfo) error {
+			if info.IsDir() {
+				if !pattern.AllowDirs() {
+					return err
+				}
+			} else {
+				if !pattern.AllowFiles() {
+					return err
+				}
+			}
+			if pattern.Match(info.Name()) {
+				return cb(info)
+			}
+			return nil
+		})
+	} else {
+		node, err := AssetGetDir(pattern.Dir())
+		if err != nil {
+			return err
+		}
+		info := assetfs.NewBindataDirInfo(pattern.Dir(), childrenInfo(node, pattern.Dir()))
+		err = info.ReadDir(func(info api.FileInfo) error {
+			if info.IsDir() {
+				if !pattern.AllowDirs() {
+					return err
+				}
+			} else {
+				if !pattern.AllowFiles() {
+					return err
+				}
+			}
+			if pattern.Match(info.Name()) {
+				return cb(info)
+			}
+			return nil
+		})
 	}
-	return filepath_cleanGlobPath(path)
-}
-`
+	return
+}`
 }

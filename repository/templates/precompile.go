@@ -1,7 +1,7 @@
 package templates
 
 func PreCompile() string {
-	return `// +build {{.PreCompileTag}}
+	return `// +build {{.BindataCompileTag}}
 
 package {{.Package}}
 
@@ -9,8 +9,7 @@ import "fmt"
 
 func init() {
 	AddCallback(func() {
-		fmt.Println("Pre Compiling '{{.Package}}'") 
-		Repository.AddSourcePath(FileSystem.GetPaths(true)...)
+		fmt.Println("Pre Compiling '{{.Package}}'")
 		Repository.Sync()
 		fmt.Println("Pre Compiling '{{.Package}}' done.")
 	})

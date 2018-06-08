@@ -1,16 +1,13 @@
 package templates
 
-func Repository() string {
+func Common() string {
 	return `package {{.Package}}
 
-import (
-	"github.com/moisespsena/go-path-helpers"
-	"github.com/moisespsena/go-assetfs/repository"
-)
+import "github.com/moisespsena/go-path-helpers"
 
 var (
 	DIR = path_helpers.GetCalledDir(true)
-	Repository repository.Interface = repository.NewRepository(path_helpers.GetCalledDir())
+	Repository = AssetFS.NewRepository(path_helpers.GetCalledDir())	
 	callbacks  []func()
 )
 

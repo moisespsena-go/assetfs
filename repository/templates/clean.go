@@ -1,7 +1,7 @@
 package templates
 
 func Clean() string {
-	return `// +build {{.CleanTag}}
+	return `// +build {{.BindataCleanTag}}
 
 package {{.Package}}
 

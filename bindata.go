@@ -1,18 +1,19 @@
 package assetfs
 
 import (
-	"net/http"
-	"path/filepath"
-	"github.com/moisespsena/go-assetfs/repository"
-	"github.com/moisespsena/go-path-helpers"
-	"strings"
-	"github.com/moisespsena/go-assetfs/api"
-	rapi "github.com/moisespsena/go-assetfs/repository/api"
-	"os"
-	"io"
 	"errors"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
+
+	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/go-assetfs/repository"
+	rapi "github.com/moisespsena/go-assetfs/repository/api"
+	"github.com/moisespsena/go-path-helpers"
 )
 
 var ERR_BINDATA_FILE = errors.New("Bindata file.")

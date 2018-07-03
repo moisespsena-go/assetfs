@@ -92,17 +92,30 @@ func (fs *AssetFileSystem) GetPath() string {
 
 // RegisterPath register view paths
 func (fs *AssetFileSystem) RegisterPath(pth string) error {
+	_, err := fs.registerPath(pth, false)
+	return err
+}
+
+// RegisterPath register view paths
+func (fs *AssetFileSystem) RegisterPathFS(pth string) (api.Interface, error) {
 	return fs.registerPath(pth, false)
 }
 
 // PrependPath prepend path to view paths
 func (fs *AssetFileSystem) PrependPath(pth string) error {
+	_, err := fs.registerPath(pth, true)
+	return err
+}
+
+// PrependPath prepend path to view paths
+func (fs *AssetFileSystem) PrependPathFS(pth string) (api.Interface, error) {
 	return fs.registerPath(pth, true)
 }
 
 // RegisterPath register view paths
-func (fs *AssetFileSystem) registerPath(pth string, prepend bool) error {
+func (fs *AssetFileSystem) registerPath(pth string, prepend bool) (api.Interface, error) {
 	pth = filepath.Clean(pth)
+	var pfs api.Interface
 	if _, err := os.Stat(pth); !os.IsNotExist(err) {
 		var existing bool
 		for _, p := range fs.paths {
@@ -118,21 +131,21 @@ func (fs *AssetFileSystem) registerPath(pth string, prepend bool) error {
 				fs.paths = append(fs.paths, pth)
 			}
 
-			pthFS := fs.newPathNameSpace(pth)
-			pthFS.(*AssetFileSystem).path = fs.path
+			pfs = fs.newPathNameSpace(pth)
+			pfs.(*AssetFileSystem).path = fs.path
 
 			for _, plugin := range fs.plugins {
-				plugin.PathRegisterCallback(pthFS)
+				plugin.PathRegisterCallback(pfs)
 			}
 
 			for _, cb := range fs.callbacks {
-				cb(pthFS)
+				cb(pfs)
 			}
 		}
 
-		return nil
+		return pfs, nil
 	}
-	return errors.New("not found")
+	return nil, errors.New("not found")
 }
 
 // Compile compile assetfs

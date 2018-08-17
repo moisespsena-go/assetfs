@@ -1,13 +1,36 @@
 package assetfs
 
 import (
+	"io"
 	"os"
 	"path/filepath"
-	"io"
+	"strings"
+
 	"github.com/moisespsena/go-assetfs/api"
 	"github.com/moisespsena/go-path-helpers"
-	"strings"
 )
+
+type FileInfoAsset struct {
+	info api.FileInfo
+	name string
+	data []byte
+}
+
+func (a *FileInfoAsset) GetName() string {
+	return a.name
+}
+
+func (a *FileInfoAsset) GetData() []byte {
+	return a.data
+}
+
+func (a *FileInfoAsset) GetString() string {
+	return string(a.data)
+}
+
+func (a *FileInfoAsset) GetPath() string {
+	return a.info.RealPath()
+}
 
 // Names list matched files from assetfs
 func filesystemGlob(fs *AssetFileSystem, pattern api.GlobPattern, cb func(pth string, isDir bool) error) error {
@@ -15,6 +38,7 @@ func filesystemGlob(fs *AssetFileSystem, pattern api.GlobPattern, cb func(pth st
 		return cb(info.Path(), info.IsDir())
 	})
 }
+
 // Names list matched files from assetfs
 func filesystemGlobInfo(fs *AssetFileSystem, pattern api.GlobPattern, cb func(info api.FileInfo) error) error {
 	set := make(map[string]bool)
@@ -42,9 +66,9 @@ func filesystemGlobInfo(fs *AssetFileSystem, pattern api.GlobPattern, cb func(in
 		return nil
 	}
 	if pattern.IsRecursive() {
-		return fs.WalkInfo(pattern.Dir(), cb2, api.WalkAll ^ api.WalkDirs)
+		return fs.WalkInfo(pattern.Dir(), cb2, api.WalkAll^api.WalkDirs)
 	}
-	return fs.ReadDir(pattern.Dir(), cb2, true)
+	return fs.readDir(pattern.Dir(), cb2, true, true)
 }
 
 // Asset get content with name from assetfs
@@ -57,29 +81,34 @@ func filesystemAsset(fs *AssetFileSystem, name string) (api.AssetInterface, erro
 	if err != nil {
 		return nil, err
 	}
-	return NewAsset(name, data), nil
+	return &FileInfoAsset{info, name, data}, nil
 }
 
-func filesystemAssetInfo(fs *AssetFileSystem, path string) (info api.FileInfo, err error) {
+func filesystemAssetInfo(fs *AssetFileSystem, pth string) (info api.FileInfo, err error) {
 	var r string
-	err = fs.PathsFrom(path, func(pth string) error {
-		r = pth
-		return io.EOF
+	dir, base := filepath.Split(pth)
+	err = fs.PathsFrom(dir, func(pth string) error {
+		pth = filepath.Join(pth, base)
+		if _, err := os.Stat(pth); err == nil {
+			r = pth
+			return io.EOF
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	if r == "" {
-		return nil, api.NotFound(path)
+		return nil, api.NotFound(pth)
 	}
 	stat, err := os.Stat(r)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, api.NotFound(path)
+			return nil, api.NotFound(pth)
 		}
 		return nil, err
 	}
-	return &RealFileInfo{FSFileInfoBase{fs, path}, stat, r}, nil
+	return &RealFileInfo{FSFileInfoBase{fs, pth}, stat, r}, nil
 }
 
 func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode api.WalkMode) (err error) {
@@ -90,7 +119,7 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 	if dir == "." {
 		if fs.nameSpaces != nil {
 			for _, ns := range fs.nameSpaces {
-				err = filesystemWalk(ns, ".", cb, mode | api.WalkNameSpacesLookUp ^ api.WalkParentLookUp)
+				err = filesystemWalk(ns, ".", cb, mode|api.WalkNameSpacesLookUp^api.WalkParentLookUp)
 				if err != nil {
 					return err
 				}
@@ -136,7 +165,7 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 		if mode.IsNameSpacesLookUp() && fs.nameSpaces != nil {
 			parts := strings.SplitN(dir, string(os.PathSeparator), 2)
 			if ns, ok := fs.nameSpaces[parts[0]]; ok {
-				err = filesystemWalk(ns, parts[1], cb, mode | api.WalkNameSpacesLookUp ^ api.WalkParentLookUp)
+				err = filesystemWalk(ns, parts[1], cb, mode|api.WalkNameSpacesLookUp^api.WalkParentLookUp)
 				if err != nil {
 					return err
 				}
@@ -189,7 +218,10 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 		} else {
 			dir = filepath.Join(fs.nameSpace, dir)
 		}
-		return filesystemWalk(fs.parent.(*AssetFileSystem), dir, cb, mode ^ api.WalkNameSpacesLookUp)
+		if mode.IsNameSpacesLookUp() {
+			mode ^= api.WalkNameSpacesLookUp
+		}
+		return filesystemWalk(fs.parent.(*AssetFileSystem), dir, cb, mode)
 	}
 	return
 }

@@ -95,6 +95,7 @@ type AssetInterface interface {
 	GetName() string
 	GetData() []byte
 	GetString() string
+	GetPath() string
 }
 
 type AssetGetterInterface interface {

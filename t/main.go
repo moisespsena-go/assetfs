@@ -12,36 +12,42 @@ func main() {
 	ns.RegisterPath("t/ns")
 	fs.RegisterPath("t/data")
 	fs.RegisterPath("t/data2")
+	fmt.Println("------walk info from NS 'z' -------")
 	ns.WalkInfo(".", func(info api.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
 	})
-	fmt.Println("-------------")
+	fmt.Println("------walk info from FS '.' -------")
 	fs.WalkInfo(".", func(info api.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
 	})
-	fmt.Println("-------------")
+	fmt.Println("------ readir from FS '.' -------")
 	fs.ReadDir(".", func(info api.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
 	}, false)
-	fmt.Println("-------------")
+	fmt.Println("------ glob string from FS '.' -------")
 	matches, _ := fs.NewGlobString(">*.txt").Names()
 	fmt.Println(matches)
-	fmt.Println("-------------")
+	fmt.Println("------ FS '.' DUMP -------")
 	fs.Dump(func(info api.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
 	})
-	fmt.Println("-------------")
+	/*fmt.Println("---- paths from z/a ---------")
 	fs.PathsFrom("z/a", func(pth string) error {
 		fmt.Println(pth)
 		return nil
+	})*/
+	fmt.Println("---- paths from z/a/x.txt ---------")
+	fs.PathsFrom("z/a/x.txt", func(pth string) error {
+		fmt.Println(pth)
+		return nil
 	})
-	fmt.Println("-------------")
+/*	fmt.Println("-------------")
 	asset, err := fs.Asset("z/a/x.txt")
 	fmt.Println(string(asset.GetData()))
-	fmt.Println(err)
+	fmt.Println(err)*/
 
 }

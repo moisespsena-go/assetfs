@@ -2,10 +2,11 @@ package assetfs
 
 import (
 	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/go-error-wrap"
 )
 
 type AssetGetter struct {
-	fs Interface
+	fs            Interface
 	AssetFunc     func(path string) ([]byte, error)
 	AssetInfoFunc func(path string) (api.FileInfo, error)
 	providers     []Interface
@@ -20,7 +21,7 @@ func (f *AssetGetter) Providers() []Interface {
 }
 
 func (f *AssetGetter) Asset(path string) (asset api.AssetInterface, err error) {
-	data, err := f.AssetFunc(path)
+	info, err := f.AssetInfo(path)
 	if err != nil {
 		if api.IsNotFound(err) {
 			var err2 error
@@ -35,7 +36,11 @@ func (f *AssetGetter) Asset(path string) (asset api.AssetInterface, err error) {
 		}
 		return nil, &api.AssetError{path, err}
 	}
-	return NewAsset(path, data), nil
+	data, err := info.Data()
+	if err != nil {
+		return nil, errwrap.Wrap(err, "Read data")
+	}
+	return &FileInfoAsset{info, path, data}, nil
 }
 
 func (f *AssetGetter) AssetOrPanic(path string) api.AssetInterface {

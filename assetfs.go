@@ -5,12 +5,13 @@ import (
 )
 
 type Asset struct {
+	Path string
 	Name string
 	Data []byte
 }
 
-func NewAsset(name string, data []byte) api.AssetInterface {
-	return &Asset{name, data}
+func NewAsset(path, name string, data []byte) api.AssetInterface {
+	return &Asset{path, name, data}
 }
 
 func (a *Asset) GetData() []byte {
@@ -23,4 +24,8 @@ func (a *Asset) GetString() string {
 
 func (a *Asset) GetName() string {
 	return a.Name
+}
+
+func (a *Asset) GetPath() string {
+	return a.Path
 }

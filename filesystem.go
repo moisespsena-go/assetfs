@@ -1,20 +1,21 @@
 package assetfs
 
 import (
-	"os"
-	"fmt"
 	"errors"
-	"strings"
-	"net/http"
-	"path/filepath"
-	"github.com/moisespsena/go-path-helpers"
-	rapi "github.com/moisespsena/go-assetfs/repository/api"
-	"github.com/moisespsena/orderedmap"
-	"io/ioutil"
-	"sort"
+	"fmt"
 	"io"
+	"io/ioutil"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
 	"github.com/moisespsena/go-assetfs/api"
 	"github.com/moisespsena/go-assetfs/repository"
+	rapi "github.com/moisespsena/go-assetfs/repository/api"
+	"github.com/moisespsena/go-path-helpers"
+	"github.com/moisespsena/orderedmap"
 )
 
 type assetFileSystemNameSpaces struct {
@@ -40,6 +41,28 @@ type AssetFileSystem struct {
 	callbacks  []api.PathRegisterCallback
 	handler    http.Handler
 	plugins    []api.Plugin
+	pathsFromFunc func(dir string, cb func(pth string) error) (err error)
+}
+
+type RawFileSystem struct {
+	*AssetFileSystem
+}
+
+func (r *RawFileSystem) rawPathsFrom(pth string, cb func(pth string) error) error {
+	pth = filepath.Join(r.path, pth)
+	_, err := os.Stat(pth)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return cb(pth)
+}
+
+func (r *RawFileSystem) init() {
+	r.pathsFromFunc = r.rawPathsFrom
+	r.AssetFileSystem.init()
 }
 
 func NewAssetFileSystem() *AssetFileSystem {
@@ -131,8 +154,7 @@ func (fs *AssetFileSystem) registerPath(pth string, prepend bool) (api.Interface
 				fs.paths = append(fs.paths, pth)
 			}
 
-			pfs = fs.newPathNameSpace(pth)
-			pfs.(*AssetFileSystem).path = fs.path
+			pfs = fs.newRawFS(pth)
 
 			for _, plugin := range fs.plugins {
 				plugin.PathRegisterCallback(pfs)
@@ -178,9 +200,17 @@ func (fs *AssetFileSystem) NameSpace(nameSpace string) api.NameSpacedInterface {
 }
 
 func (fs *AssetFileSystem) newPathNameSpace(pth string) api.NameSpacedInterface {
-	ns := &AssetFileSystem{nameSpace: pth, path: pth, paths:[]string{pth}}
+	ns := &AssetFileSystem{nameSpace: pth, path: pth}
+	ns.parent = fs
 	ns.init()
 	return ns
+}
+
+func (fs *AssetFileSystem) newRawFS(pth string) api.Interface {
+	ns := &AssetFileSystem{paths: []string{pth}, path:fs.path}
+	rfs := &RawFileSystem{ns}
+	rfs.init()
+	return rfs
 }
 
 func (fs *AssetFileSystem) GetNameSpace() string {
@@ -273,9 +303,9 @@ func (fs *AssetFileSystem) readDir(dir string, cb api.CbWalkInfoFunc, parentLook
 		}
 	} else {
 		for _, pth := range fs.paths {
-			pth2 := filepath.Join(pth, dir)
-			if path_helpers.IsExistingDir(pth2) {
-				err = dolsdir(pth2)
+			pth = filepath.Join(pth, dir)
+			if path_helpers.IsExistingDir(pth) {
+				err = dolsdir(pth)
 				if err != nil {
 					return err
 				}
@@ -287,7 +317,7 @@ func (fs *AssetFileSystem) readDir(dir string, cb api.CbWalkInfoFunc, parentLook
 		if dir == "" {
 			dir = fs.nameSpace
 		} else {
-			dir += fmt.Sprint(os.PathSeparator, fs.path)
+			dir = fs.nameSpace + string(os.PathSeparator) + dir
 		}
 		return fs.parent.(*AssetFileSystem).readDir(dir, cb, parentLookup, skipDir)
 	}
@@ -303,6 +333,10 @@ func (fs *AssetFileSystem) PathsFrom(pth string, cb func(pth string) error) (err
 }
 
 func (fs *AssetFileSystem) pathsFrom(dir string, cb func(pth string) error) (err error) {
+	if fs.pathsFromFunc != nil {
+		return fs.pathsFromFunc(dir, cb)
+	}
+
 	if dir == "" {
 		dir = "."
 	}
@@ -341,7 +375,8 @@ func (fs *AssetFileSystem) pathsFrom(dir string, cb func(pth string) error) (err
 		}
 	}
 
-	return fs.newPathNameSpace(dir).(*AssetFileSystem).pathsFrom(".", cb)
+	x := fs.newPathNameSpace(dir).(*AssetFileSystem).pathsFrom(".", cb)
+	return x
 }
 
 func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*path_helpers.Path) {

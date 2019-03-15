@@ -1,38 +1,40 @@
 package assetfs
 
-import "github.com/moisespsena/go-assetfs/api"
+import (
+	"github.com/moisespsena/go-assetfs/assetfsapi"
+)
 
 type Traversable struct {
-	fs Interface
-	WalkFunc     api.WalkFunc
-	WalkInfoFunc api.WalkInfoFunc
-	ReadDirFunc  func(dir string, cb api.CbWalkInfoFunc, skipDir bool) error
-	GlobFunc      api.GlobFunc
-	GlobInfoFunc  api.GlobInfoFunc
+	FS           Interface
+	WalkFunc     assetfsapi.WalkFunc
+	WalkInfoFunc assetfsapi.WalkInfoFunc
+	ReadDirFunc  func(dir string, cb assetfsapi.CbWalkInfoFunc, skipDir bool) error
+	GlobFunc     assetfsapi.GlobFunc
+	GlobInfoFunc assetfsapi.GlobInfoFunc
 }
 
-func (t *Traversable) Walk(dir string, cb api.CbWalkFunc, mode ...api.WalkMode) error {
-	m := api.WalkAll
+func (t *Traversable) Walk(dir string, cb assetfsapi.CbWalkFunc, mode ...assetfsapi.WalkMode) error {
+	m := assetfsapi.WalkAll
 	if len(mode) > 0 {
 		m = mode[0]
 	}
 	return t.WalkFunc(dir, cb, m)
 }
 
-func (t *Traversable) WalkInfo(dir string, cb api.CbWalkInfoFunc, mode ...api.WalkMode) error {
-	m := api.WalkAll
+func (t *Traversable) WalkInfo(dir string, cb assetfsapi.CbWalkInfoFunc, mode ...assetfsapi.WalkMode) error {
+	m := assetfsapi.WalkAll
 	if len(mode) > 0 {
 		m = mode[0]
 	}
 	return t.WalkInfoFunc(dir, cb, m)
 }
 
-func (t *Traversable) ReadDir(dir string, cb api.CbWalkInfoFunc, skipDir bool) (err error) {
+func (t *Traversable) ReadDir(dir string, cb assetfsapi.CbWalkInfoFunc, skipDir bool) (err error) {
 	return t.ReadDirFunc(dir, cb, skipDir)
 }
 
-func (f *Traversable) Glob(pattern api.GlobPattern, cb func(pth string, isDir bool) error) error {
-	if pth := f.fs.GetPath(); pth != "" {
+func (f *Traversable) Glob(pattern assetfsapi.GlobPattern, cb func(pth string, isDir bool) error) error {
+	if pth := f.FS.GetPath(); pth != "" {
 		l := len(pth)
 		oldFormatter := pattern.GetPathFormatter()
 		pattern = pattern.PathFormatter(func(pth *string) {
@@ -43,8 +45,8 @@ func (f *Traversable) Glob(pattern api.GlobPattern, cb func(pth string, isDir bo
 	return f.GlobFunc(pattern, cb)
 }
 
-func (f *Traversable) GlobInfo(pattern api.GlobPattern, cb func(info api.FileInfo) error) error {
-	if pth := f.fs.GetPath(); pth != "" {
+func (f *Traversable) GlobInfo(pattern assetfsapi.GlobPattern, cb func(info assetfsapi.FileInfo) error) error {
+	if pth := f.FS.GetPath(); pth != "" {
 		l := len(pth)
 		oldFormatter := pattern.GetPathFormatter()
 		pattern = pattern.PathFormatter(func(pth *string) {
@@ -55,10 +57,10 @@ func (f *Traversable) GlobInfo(pattern api.GlobPattern, cb func(info api.FileInf
 	return f.GlobInfoFunc(pattern, cb)
 }
 
-func (f *Traversable) NewGlob(pattern api.GlobPattern) api.Glob {
-	return NewGlob(f.fs, pattern)
+func (f *Traversable) NewGlob(pattern assetfsapi.GlobPattern) assetfsapi.Glob {
+	return NewGlob(f.FS, pattern)
 }
 
-func (f *Traversable) NewGlobString(pattern string) api.Glob {
-	return NewGlob(f.fs, NewGlobPattern(pattern))
+func (f *Traversable) NewGlobString(pattern string) assetfsapi.Glob {
+	return NewGlob(f.FS, NewGlobPattern(pattern))
 }

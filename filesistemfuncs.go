@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena-go/os-common"
+
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 	"github.com/moisespsena/go-path-helpers"
 )
 
 type FileInfoAsset struct {
-	info api.FileInfo
+	info assetfsapi.FileInfo
 	name string
 	data []byte
 }
@@ -33,16 +35,16 @@ func (a *FileInfoAsset) GetPath() string {
 }
 
 // Names list matched files from assetfs
-func filesystemGlob(fs *AssetFileSystem, pattern api.GlobPattern, cb func(pth string, isDir bool) error) error {
-	return filesystemGlobInfo(fs, pattern, func(info api.FileInfo) error {
+func filesystemGlob(fs *AssetFileSystem, pattern assetfsapi.GlobPattern, cb func(pth string, isDir bool) error) error {
+	return filesystemGlobInfo(fs, pattern, func(info assetfsapi.FileInfo) error {
 		return cb(info.Path(), info.IsDir())
 	})
 }
 
 // Names list matched files from assetfs
-func filesystemGlobInfo(fs *AssetFileSystem, pattern api.GlobPattern, cb func(info api.FileInfo) error) error {
+func filesystemGlobInfo(fs *AssetFileSystem, pattern assetfsapi.GlobPattern, cb func(info assetfsapi.FileInfo) error) error {
 	set := make(map[string]bool)
-	cb2 := func(info api.FileInfo) error {
+	cb2 := func(info assetfsapi.FileInfo) error {
 		if info.IsDir() {
 			if !pattern.AllowDirs() {
 				return nil
@@ -66,13 +68,13 @@ func filesystemGlobInfo(fs *AssetFileSystem, pattern api.GlobPattern, cb func(in
 		return nil
 	}
 	if pattern.IsRecursive() {
-		return fs.WalkInfo(pattern.Dir(), cb2, api.WalkAll^api.WalkDirs)
+		return fs.WalkInfo(pattern.Dir(), cb2, assetfsapi.WalkAll^assetfsapi.WalkDirs)
 	}
 	return fs.readDir(pattern.Dir(), cb2, true, true)
 }
 
 // Asset get content with name from assetfs
-func filesystemAsset(fs *AssetFileSystem, name string) (api.AssetInterface, error) {
+func filesystemAsset(fs *AssetFileSystem, name string) (assetfsapi.AssetInterface, error) {
 	info, err := filesystemAssetInfo(fs, name)
 	if err != nil {
 		return nil, err
@@ -84,7 +86,7 @@ func filesystemAsset(fs *AssetFileSystem, name string) (api.AssetInterface, erro
 	return &FileInfoAsset{info, name, data}, nil
 }
 
-func filesystemAssetInfo(fs *AssetFileSystem, pth string) (info api.FileInfo, err error) {
+func filesystemAssetInfo(fs *AssetFileSystem, pth string) (info assetfsapi.FileInfo, err error) {
 	var r string
 	dir, base := filepath.Split(pth)
 	err = fs.PathsFrom(dir, func(pth string) error {
@@ -99,19 +101,19 @@ func filesystemAssetInfo(fs *AssetFileSystem, pth string) (info api.FileInfo, er
 		return nil, err
 	}
 	if r == "" {
-		return nil, api.NotFound(pth)
+		return nil, oscommon.ErrNotFound(pth)
 	}
 	stat, err := os.Stat(r)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, api.NotFound(pth)
+			return nil, oscommon.ErrNotFound(pth)
 		}
 		return nil, err
 	}
 	return &RealFileInfo{FSFileInfoBase{fs, pth}, stat, r}, nil
 }
 
-func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode api.WalkMode) (err error) {
+func filesystemWalk(fs *AssetFileSystem, dir string, cb assetfsapi.CbWalkInfoFunc, mode assetfsapi.WalkMode) (err error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -119,7 +121,19 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 	if dir == "." {
 		if fs.nameSpaces != nil {
 			for _, ns := range fs.nameSpaces {
-				err = filesystemWalk(ns, ".", cb, mode|api.WalkNameSpacesLookUp^api.WalkParentLookUp)
+				err = filesystemWalk(ns, ".", func(info assetfsapi.FileInfo) error {
+					npth := strings.TrimPrefix(ns.path, fs.path)
+					if npth[0] == '/' {
+						npth = npth[1:]
+					}
+					switch t := info.(type) {
+					case *RealDirFileInfo:
+						t.path = filepath.Join(npth, t.path)
+					case *RealFileInfo:
+						t.path = filepath.Join(npth, t.path)
+					}
+					return cb(info)
+				}, mode|assetfsapi.WalkNameSpacesLookUp^assetfsapi.WalkParentLookUp)
 				if err != nil {
 					return err
 				}
@@ -142,7 +156,7 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 				if pth[0] == filepath.Separator {
 					pth = pth[1:]
 				}
-				var inf api.FileInfo
+				var inf assetfsapi.FileInfo
 				if info.IsDir() {
 					if !mode.IsDirs() {
 						return nil
@@ -165,7 +179,7 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 		if mode.IsNameSpacesLookUp() && fs.nameSpaces != nil {
 			parts := strings.SplitN(dir, string(os.PathSeparator), 2)
 			if ns, ok := fs.nameSpaces[parts[0]]; ok {
-				err = filesystemWalk(ns, parts[1], cb, mode|api.WalkNameSpacesLookUp^api.WalkParentLookUp)
+				err = filesystemWalk(ns, parts[1], cb, mode|assetfsapi.WalkNameSpacesLookUp^assetfsapi.WalkParentLookUp)
 				if err != nil {
 					return err
 				}
@@ -188,7 +202,7 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 						pth = pth[1:]
 					}
 
-					var inf api.FileInfo
+					var inf assetfsapi.FileInfo
 
 					if info.IsDir() {
 						if !mode.IsDirs() {
@@ -219,7 +233,7 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb api.CbWalkInfoFunc, mode
 			dir = filepath.Join(fs.nameSpace, dir)
 		}
 		if mode.IsNameSpacesLookUp() {
-			mode ^= api.WalkNameSpacesLookUp
+			mode ^= assetfsapi.WalkNameSpacesLookUp
 		}
 		return filesystemWalk(fs.parent.(*AssetFileSystem), dir, cb, mode)
 	}

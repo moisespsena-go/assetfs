@@ -1,14 +1,16 @@
 package api
 
 import (
-	"github.com/moisespsena/go-path-helpers"
-	"os"
 	"io"
+	"os"
+
+	"github.com/moisespsena-go/file-utils"
+	"github.com/moisespsena-go/sortvalues"
+	"github.com/moisespsena-go/xbindata"
 )
 
-
-type PreSourceAddFunc = func(repo Interface, src interface{}) interface{}
-type AfterSourceAddFunc = func(repo Interface, src interface{})
+type PreSourceAddFunc = func(repo Interface, src fileutils.Copier) fileutils.Copier
+type AfterSourceAddFunc = func(repo Interface, src fileutils.Copier)
 
 type Template struct {
 	Name string
@@ -20,9 +22,14 @@ type Plugin interface {
 	Init(repo Interface)
 }
 
+type PrepareConfigCallbackValueInterface interface {
+	sortvalues.ValueInterface
+	Callback() func(config *xbindata.Config)
+}
+
 type Interface interface {
-	AddSource(sources ...interface{})
-	AddSourcePath(sources ...*path_helpers.Path)
+	AddSource(sources ...fileutils.Copier)
+	AddSourcePath(sources ...*fileutils.Dir)
 	BinFile() string
 	AbsPath(create ...bool) string
 	DataDir(create ...bool) string
@@ -37,6 +44,8 @@ type Interface interface {
 	PreClean(cbcs ...func(repo Interface))
 	AfterClean(cbcs ...func(repo Interface))
 	Dumper(dumpers ...Dumper)
+	PrepareConfig(f func(config *xbindata.Config), name ...string) PrepareConfigCallbackValueInterface
+	IgnorePath(f ...func(pth string) bool)
 }
 
-type Dumper func(cb func(pth string, stat os.FileInfo, reader io.Reader) error) error
+type Dumper func(cb func(pth string, stat os.FileInfo, reader io.Reader) error, ignore ...func(pth string) bool) error

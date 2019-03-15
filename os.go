@@ -1,13 +1,16 @@
 package assetfs
 
 import (
-	"time"
-	"os"
 	"io"
-	"github.com/go-errors/errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
-	"github.com/moisespsena/go-assetfs/api"
+	"time"
+
+	"github.com/moisespsena-go/io-common"
+
+	"github.com/go-errors/errors"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 )
 
 var (
@@ -22,11 +25,11 @@ type PrivateFSFileInfoInterface interface {
 }
 
 type FSFileInfoBase struct {
-	fs api.Interface
+	fs   assetfsapi.Interface
 	path string
 }
 
-func (f *FSFileInfoBase) FS() api.Interface  {
+func (f *FSFileInfoBase) FS() assetfsapi.Interface {
 	return f.fs
 }
 
@@ -34,11 +37,11 @@ func (f *FSFileInfoBase) Path() string {
 	return f.path
 }
 
-func (f *FSFileInfoBase) PrivateSetFS(fs Interface)  {
+func (f *FSFileInfoBase) PrivateSetFS(fs Interface) {
 	f.fs = fs
 }
 
-func (f *FSFileInfoBase) PrivateSetPath(path string)  {
+func (f *FSFileInfoBase) PrivateSetPath(path string) {
 	f.path = path
 }
 
@@ -48,15 +51,15 @@ type RealFileInfo struct {
 	realPath string
 }
 
-func (RealFileInfo) Type() api.FileType {
-	return api.FileTypeReal | api.FileTypeNormal
+func (RealFileInfo) Type() assetfsapi.FileType {
+	return assetfsapi.FileTypeReal | assetfsapi.FileTypeNormal
 }
 
 func (rf *RealFileInfo) RealPath() string {
 	return rf.realPath
 }
 
-func (rf *RealFileInfo) Reader() (io.ReadCloser, error) {
+func (rf *RealFileInfo) Reader() (iocommon.ReadSeekCloser, error) {
 	return os.Open(rf.realPath)
 }
 
@@ -86,11 +89,12 @@ func (rf *RealFileInfo) Data() ([]byte, error) {
 type RealDirFileInfo struct {
 	*RealFileInfo
 }
-func (RealDirFileInfo) Type() api.FileType {
-	return api.FileTypeReal | api.FileTypeDir
+
+func (RealDirFileInfo) Type() assetfsapi.FileType {
+	return assetfsapi.FileTypeReal | assetfsapi.FileTypeDir
 }
 
-func (rf *RealDirFileInfo) Reader() (io.ReadCloser, error) {
+func (rf *RealDirFileInfo) Reader() (iocommon.ReadSeekCloser, error) {
 	return nil, IS_DIR_ERROR
 }
 
@@ -110,14 +114,14 @@ func (rf *RealDirFileInfo) String() string {
 	return StringifyFileInfo(rf)
 }
 
-func (d *RealDirFileInfo) ReadDir(cb func(child api.FileInfo) error) (err error) {
+func (d *RealDirFileInfo) ReadDir(cb func(child assetfsapi.FileInfo) error) (err error) {
 	infos, err := ioutil.ReadDir(d.realPath)
 	if err != nil {
 		return err
 	}
 
 	for _, info := range infos {
-		rinfo := &RealFileInfo{FSFileInfoBase{d.fs, filepath.Join(d.path, info.Name())}, info,  filepath.Join(d.realPath, info.Name())}
+		rinfo := &RealFileInfo{FSFileInfoBase{d.fs, filepath.Join(d.path, info.Name())}, info, filepath.Join(d.realPath, info.Name())}
 		if info.IsDir() {
 			err = cb(&RealDirFileInfo{rinfo})
 		} else {
@@ -133,11 +137,11 @@ func (d *RealDirFileInfo) ReadDir(cb func(child api.FileInfo) error) (err error)
 type NameSpaceFileInfo struct {
 	FSFileInfoBase
 	name string
-	ns   api.Interface
+	ns   assetfsapi.Interface
 }
 
-func (NameSpaceFileInfo) Type() api.FileType {
-	return api.FileTypeNameSpace
+func (NameSpaceFileInfo) Type() assetfsapi.FileType {
+	return assetfsapi.FileTypeNameSpace
 }
 
 func (ns *NameSpaceFileInfo) Name() string {
@@ -159,10 +163,9 @@ func (ns *NameSpaceFileInfo) Sys() interface{} {
 	return nil
 }
 
-func (ns *NameSpaceFileInfo) Reader() (io.ReadCloser, error) {
+func (ns *NameSpaceFileInfo) Reader() (iocommon.ReadSeekCloser, error) {
 	return nil, IS_NS_ERROR
 }
-
 func (ns *NameSpaceFileInfo) Writer() (io.WriteCloser, error) {
 	return nil, IS_NS_ERROR
 }
@@ -175,7 +178,7 @@ func (ns *NameSpaceFileInfo) Data() ([]byte, error) {
 	return nil, IS_NS_ERROR
 }
 
-func (ns *NameSpaceFileInfo) ReadDir(cb func(child api.FileInfo) error) (err error) {
+func (ns *NameSpaceFileInfo) ReadDir(cb func(child assetfsapi.FileInfo) error) (err error) {
 	return ns.fs.ReadDir(".", cb, false)
 }
 func (ns *NameSpaceFileInfo) RealPath() string {
@@ -186,7 +189,7 @@ func (ns *NameSpaceFileInfo) String() string {
 	return StringifyFileInfo(ns)
 }
 
-func StringifyFileInfo(info api.FileInfo) (string) {
+func StringifyFileInfo(info assetfsapi.FileInfo) string {
 	b := []byte("oo")
 	typ := info.Type()
 	if typ.IsDir() {
@@ -204,21 +207,21 @@ func StringifyFileInfo(info api.FileInfo) (string) {
 	return string(b) + "://" + info.Path()
 }
 
-func ParseFileType(typ string) (t api.FileType) {
+func ParseFileType(typ string) (t assetfsapi.FileType) {
 	if typ[2:5] == "://" {
 		switch typ[0] {
 		case 'd':
-			t |= api.FileTypeDir
+			t |= assetfsapi.FileTypeDir
 		case 'f':
-			t |= api.FileTypeNormal
+			t |= assetfsapi.FileTypeNormal
 		case 'n':
-			t |= api.FileTypeNameSpace
+			t |= assetfsapi.FileTypeNameSpace
 		}
 		switch typ[1] {
 		case 'b':
-			t |= api.FileTypeBindata
+			t |= assetfsapi.FileTypeBindata
 		case 'r':
-			t |= api.FileTypeReal
+			t |= assetfsapi.FileTypeReal
 		}
 	}
 	return t

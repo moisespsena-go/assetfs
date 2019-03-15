@@ -1,19 +1,39 @@
 package repository
 
 import (
-	"os"
-	"fmt"
 	"bytes"
+	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"text/template"
-	"github.com/jteeuwen/go-bindata"
-	"github.com/moisespsena/go-path-helpers"
-	"github.com/moisespsena/go-assetfs/repository/templates"
+
+	"github.com/moisespsena-go/file-utils"
+	"github.com/moisespsena-go/sortvalues"
+	"github.com/moisespsena-go/xbindata"
 	"github.com/moisespsena/go-assetfs/repository/api"
-	"io"
+	"github.com/moisespsena/go-assetfs/repository/templates"
+	"github.com/moisespsena/go-error-wrap"
+	"github.com/moisespsena/go-path-helpers"
 )
 
+const DefaultBS = 1024 * 1024 * 20
+
+var DefaultBufferSize = DefaultBS
+
 type Template = api.Template
+
+type PrepareConfigCallbackValue struct {
+	sortvalues.ValueInterface
+}
+
+func (cb PrepareConfigCallbackValue) Callback() func(config *xbindata.Config) {
+	return cb.Value().(func(config *xbindata.Config))
+}
+
+func PrepareConfigCallback(f func(config *xbindata.Config), name ...string) PrepareConfigCallbackValue {
+	return PrepareConfigCallbackValue{sortvalues.NewValue(f, name...)}
+}
 
 type Repository struct {
 	PackagePath       string
@@ -22,8 +42,8 @@ type Repository struct {
 	BindataCleanTag   string
 	BindataTag        string
 	Templates         []*Template
-	PrepareConfig     func(config *bindata.Config)
-	Sources           []interface{}
+	prepareConfig     sortvalues.Sorter
+	Sources           []fileutils.Copier
 	sources           map[interface{}]int
 	absPath           string
 	Plugins           []api.Plugin
@@ -34,6 +54,7 @@ type Repository struct {
 	preSync           []func(repo api.Interface)
 	afterSync         []func(repo api.Interface)
 	dumpers           []api.Dumper
+	ignorePaths        []func(pth string) bool
 }
 
 func NewRepository(packagePath string) *Repository {
@@ -41,17 +62,25 @@ func NewRepository(packagePath string) *Repository {
 		BindataCompileTag: "assetfs_bindataCompile", BindataTag: "assetfs_bindata", BindataCleanTag: "assetfs_bindataClean"}
 }
 
+func (r *Repository) PrepareConfig(f func(config *xbindata.Config), name ...string) (v api.PrepareConfigCallbackValueInterface) {
+	v = PrepareConfigCallback(f, name...)
+	if err := r.prepareConfig.Append(v); err != nil {
+		panic(err)
+	}
+	return
+}
+
 func (r *Repository) RegisterPlugin(plugins ...api.Plugin) {
 	r.Plugins = append(r.Plugins, plugins...)
 }
 
-func (r *Repository) AddSourcePath(sources ...*path_helpers.Path) {
+func (r *Repository) AddSourcePath(sources ...*fileutils.Dir) {
 	for _, p := range sources {
 		r.AddSource(p)
 	}
 }
 
-func (r *Repository) AddSource(sources ...interface{}) {
+func (r *Repository) AddSource(sources ...fileutils.Copier) {
 	if r.sources == nil {
 		r.sources = make(map[interface{}]int)
 	}
@@ -79,7 +108,7 @@ func (r *Repository) AbsPath(create ...bool) string {
 		if absPath := path_helpers.ResolveGoSrcPath(filepath.Dir(r.PackagePath)); absPath != "" {
 			absPath = filepath.Join(absPath, filepath.Base(r.PackagePath))
 			if (len(create) != 0 && create[0]) && !path_helpers.IsExistingDir(absPath) {
-				perms, err := path_helpers.ResolvPerms(absPath)
+				perms, err := path_helpers.ResolvePerms(absPath)
 				if err != nil {
 					panic(fmt.Errorf("Error on resolv mode: %v", err))
 				}
@@ -96,7 +125,7 @@ func (r *Repository) AbsPath(create ...bool) string {
 func (r *Repository) DataDir(create ...bool) string {
 	absPath := filepath.Join(r.AbsPath(create...), "data")
 	if (len(create) != 0 && create[0]) && !path_helpers.IsExistingDir(absPath) {
-		perms, err := path_helpers.ResolvPerms(absPath)
+		perms, err := path_helpers.ResolvePerms(absPath)
 		if err != nil {
 			panic(fmt.Errorf("Error on resolv mode: %v", err))
 		}
@@ -120,8 +149,8 @@ func (r *Repository) renderTemplate(tpl string) []byte {
 	return out.Bytes()
 }
 
-func (r *Repository) template(tpl *Template) interface{} {
-	return &path_helpers.Path{Alias: tpl.Name, Data: r.renderTemplate(tpl.Data)}
+func (r *Repository) template(tpl *Template) fileutils.Copier {
+	return &fileutils.SrcData{Destation: fileutils.Destation{tpl.Name}, Data: r.renderTemplate(tpl.Data)}
 }
 
 func (r *Repository) GetInitTempĺates() []*Template {
@@ -146,7 +175,7 @@ func (r *Repository) InitWithTemplates(tpls []*Template) {
 		panic("Invalid absPath.")
 	}
 
-	tplsi := make([]interface{}, len(tpls))
+	tplsi := make([]fileutils.Copier, len(tpls))
 	gitIgnore := "data\ndata.go\n"
 
 	for i, t := range tpls {
@@ -154,9 +183,9 @@ func (r *Repository) InitWithTemplates(tpls []*Template) {
 		gitIgnore += t.Name + "\n"
 	}
 
-	tplsi = append(tplsi, &path_helpers.Path{Alias: ".gitignore", Data: []byte(gitIgnore)})
+	tplsi = append(tplsi, &fileutils.SrcData{Destation: fileutils.Destation{".gitignore"}, Data: []byte(gitIgnore)})
 
-	if err := path_helpers.CopyTree(absPath, tplsi); err != nil {
+	if err := fileutils.CopyTree(absPath, tplsi); err != nil {
 		panic(err)
 	}
 }
@@ -168,16 +197,16 @@ func (r *Repository) Init() {
 	}
 }
 
-func (r *Repository) Sync() {
-	for _, cb := range r.preSync {
-		cb(r)
+func (r *Repository) IsIgnorePath(pth string) bool {
+	for _, f := range r.ignorePaths {
+		if f(pth) {
+			return true
+		}
 	}
-	sdest := r.DataDir(true)
-	os.RemoveAll(sdest)
-	if err := path_helpers.CopyTree(sdest, r.Sources); err != nil {
-		panic(err)
-	}
+	return false
+}
 
+func (r *Repository) copy(sdest string) {
 	var err error
 
 	for i, dump := range r.dumpers {
@@ -191,25 +220,43 @@ func (r *Repository) Sync() {
 					}
 				}
 				return nil
+			} else {
+				dirName := filepath.Dir(opath)
+				if _, err := os.Stat(dirName); os.IsNotExist(err) {
+					mode, err := path_helpers.ResolvePerms(dirName)
+					if err != nil {
+						return errwrap.Wrap(err, "Resolve permissions of %q", dirName)
+					}
+					if err := os.MkdirAll(dirName, os.FileMode(mode)); err != nil {
+						return fmt.Errorf("Sync: Dump[%v] mkdir %q: %v", i, pth, err)
+					}
+				}
 			}
-			writer, err := os.Create(opath)
-			if err != nil {
+
+			if err := fileutils.CreateFileSync(opath, reader, stat); err != nil {
 				return fmt.Errorf("Sync: Dump[%v] create %q: %v", i, pth, err)
 			}
-			defer writer.Close()
-			_, err = io.Copy(writer, reader)
-			if err != nil {
-				return fmt.Errorf("Sync: Dump[%v] copy %q to %q: %v", i, pth, opath, err)
-			}
 			return nil
-		})
+		}, r.IsIgnorePath)
 		if err != nil {
 			panic(err)
 		}
 	}
+}
+func (r *Repository) Sync() {
+	for _, cb := range r.preSync {
+		cb(r)
+	}
+	sdest := r.DataDir(true)
 
-	config := bindata.NewConfig()
-	config.Input = []bindata.InputConfig{
+	if err := fileutils.CopyTree(sdest, r.Sources); err != nil {
+		panic(err)
+	}
+
+	r.copy(sdest)
+
+	config := xbindata.NewConfig()
+	config.Input = []xbindata.InputConfig{
 		{
 			Path:      sdest,
 			Recursive: true,
@@ -219,13 +266,18 @@ func (r *Repository) Sync() {
 	config.Tags = r.BindataTag
 	config.Output = r.BinFile()
 	config.Prefix = sdest
-	config.NoMetadata = true
+	config.FileSystem = true
+	config.Embed = true
 
-	if r.PrepareConfig != nil {
-		r.PrepareConfig(config)
+	prepareConfig, err := r.prepareConfig.Sort()
+	if err != nil {
+		panic(err)
+	}
+	for _, pc := range prepareConfig {
+		pc.Value().(func(config *xbindata.Config))(config)
 	}
 
-	if err := bindata.Translate(config); err != nil {
+	if err := xbindata.Translate(config); err != nil {
 		panic(err)
 	}
 	for _, cb := range r.afterSync {
@@ -268,4 +320,8 @@ func (r *Repository) AfterClean(cbcs ...func(repo api.Interface)) {
 }
 func (r *Repository) Dumper(dumpers ...api.Dumper) {
 	r.dumpers = append(r.dumpers, dumpers...)
+}
+
+func (r *Repository) IgnorePath(f ...func(pth string) bool) {
+	r.ignorePaths = append(r.ignorePaths, f...)
 }

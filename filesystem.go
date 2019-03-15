@@ -11,7 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena-go/file-utils"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 	"github.com/moisespsena/go-assetfs/repository"
 	rapi "github.com/moisespsena/go-assetfs/repository/api"
 	"github.com/moisespsena/go-path-helpers"
@@ -31,16 +32,16 @@ func (a *assetFileSystemNameSpaces) Get(key string) (*AssetFileSystem, bool) {
 
 // AssetFileSystem AssetFS based on FileSystem
 type AssetFileSystem struct {
-	api.AssetGetterInterface
-	api.TraversableInterface
-	parent     api.Interface
-	paths      []string
-	path       string
-	nameSpaces map[string]*AssetFileSystem
-	nameSpace  string
-	callbacks  []api.PathRegisterCallback
-	handler    http.Handler
-	plugins    []api.Plugin
+	assetfsapi.AssetGetterInterface
+	assetfsapi.TraversableInterface
+	parent        assetfsapi.Interface
+	paths         []string
+	path          string
+	nameSpaces    map[string]*AssetFileSystem
+	nameSpace     string
+	callbacks     []assetfsapi.PathRegisterCallback
+	handler       http.Handler
+	plugins       []assetfsapi.Plugin
 	pathsFromFunc func(dir string, cb func(pth string) error) (err error)
 }
 
@@ -75,37 +76,37 @@ func (fs *AssetFileSystem) init() {
 	fs.AssetGetterInterface = &AssetGetter{
 		fs: fs,
 		AssetFunc: func(name string) (data []byte, err error) {
-			var asset api.AssetInterface
+			var asset assetfsapi.AssetInterface
 			asset, err = filesystemAsset(fs, name)
 			if err != nil {
 				return
 			}
 			return asset.GetData(), nil
 		},
-		AssetInfoFunc: func(path string) (api.FileInfo, error) {
+		AssetInfoFunc: func(path string) (assetfsapi.FileInfo, error) {
 			return filesystemAssetInfo(fs, path)
 		},
 	}
 	fs.TraversableInterface = &Traversable{
-		fs: fs,
-		WalkFunc: func(dir string, cb api.CbWalkFunc, mode api.WalkMode) error {
-			return filesystemWalk(fs, dir, func(info api.FileInfo) error {
+		FS: fs,
+		WalkFunc: func(dir string, cb assetfsapi.CbWalkFunc, mode assetfsapi.WalkMode) error {
+			return filesystemWalk(fs, dir, func(info assetfsapi.FileInfo) error {
 				return cb(info.Path(), info.IsDir())
 			}, mode)
 		},
-		WalkInfoFunc: func(dir string, cb api.CbWalkInfoFunc, mode api.WalkMode) error {
+		WalkInfoFunc: func(dir string, cb assetfsapi.CbWalkInfoFunc, mode assetfsapi.WalkMode) error {
 			return filesystemWalk(fs, dir, cb, mode)
 		},
-		GlobFunc: func(pattern api.GlobPattern, cb func(pth string, isDir bool) error) (err error) {
+		GlobFunc: func(pattern assetfsapi.GlobPattern, cb func(pth string, isDir bool) error) (err error) {
 			return filesystemGlob(fs, pattern, cb)
 		},
-		GlobInfoFunc: func(pattern api.GlobPattern, cb func(info api.FileInfo) error) (err error) {
+		GlobInfoFunc: func(pattern assetfsapi.GlobPattern, cb func(info assetfsapi.FileInfo) error) (err error) {
 			return filesystemGlobInfo(fs, pattern, cb)
 		},
 	}
 }
 
-func (fs *AssetFileSystem) OnPathRegister(cb ...api.PathRegisterCallback) {
+func (fs *AssetFileSystem) OnPathRegister(cb ...assetfsapi.PathRegisterCallback) {
 	fs.callbacks = append(fs.callbacks, cb...)
 }
 
@@ -114,32 +115,39 @@ func (fs *AssetFileSystem) GetPath() string {
 }
 
 // RegisterPath register view paths
-func (fs *AssetFileSystem) RegisterPath(pth string) error {
-	_, err := fs.registerPath(pth, false)
+func (fs *AssetFileSystem) RegisterPath(pth string, ignoreExists ...bool) error {
+	_, err := fs.registerPath(pth, false, ignoreExists...)
 	return err
 }
 
 // RegisterPath register view paths
-func (fs *AssetFileSystem) RegisterPathFS(pth string) (api.Interface, error) {
-	return fs.registerPath(pth, false)
+func (fs *AssetFileSystem) RegisterPathFS(pth string, ignoreExists ...bool) (assetfsapi.Interface, error) {
+	return fs.registerPath(pth, false, ignoreExists...)
 }
 
 // PrependPath prepend path to view paths
-func (fs *AssetFileSystem) PrependPath(pth string) error {
-	_, err := fs.registerPath(pth, true)
+func (fs *AssetFileSystem) PrependPath(pth string, ignoreExists ...bool) error {
+	_, err := fs.registerPath(pth, true, ignoreExists...)
 	return err
 }
 
 // PrependPath prepend path to view paths
-func (fs *AssetFileSystem) PrependPathFS(pth string) (api.Interface, error) {
-	return fs.registerPath(pth, true)
+func (fs *AssetFileSystem) PrependPathFS(pth string, ignoreExists ...bool) (assetfsapi.Interface, error) {
+	return fs.registerPath(pth, true, ignoreExists...)
 }
 
 // RegisterPath register view paths
-func (fs *AssetFileSystem) registerPath(pth string, prepend bool) (api.Interface, error) {
+func (fs *AssetFileSystem) registerPath(pth string, prepend bool, ignoreExists ...bool) (assetfsapi.Interface, error) {
+	var onlyExists = true
+	for _, ige := range ignoreExists {
+		if ige {
+			onlyExists = false
+			break
+		}
+	}
 	pth = filepath.Clean(pth)
-	var pfs api.Interface
-	if _, err := os.Stat(pth); !os.IsNotExist(err) {
+	var pfs assetfsapi.Interface
+	if _, err := os.Stat(pth); !onlyExists || !os.IsNotExist(err) {
 		var existing bool
 		for _, p := range fs.paths {
 			if p == pth {
@@ -175,8 +183,31 @@ func (fs *AssetFileSystem) Compile() error {
 	return nil
 }
 
+func (fs *AssetFileSystem) GetNameSpace(nameSpace string) (assetfsapi.NameSpacedInterface, error) {
+	var (
+		ns *AssetFileSystem
+		ok bool
+	)
+	for _, name := range strings.Split(strings.Trim(nameSpace, "/"), "/") {
+		if fs.nameSpaces == nil {
+			return nil, os.ErrNotExist
+		} else if ns, ok = fs.nameSpaces[name]; !ok {
+			return nil, os.ErrNotExist
+		}
+		fs = ns
+	}
+	return ns, nil
+}
+
+func (fs *AssetFileSystem) NameSpaces() (items []assetfsapi.NameSpacedInterface) {
+	for _, v := range fs.nameSpaces {
+		items = append(items, v)
+	}
+	return
+}
+
 // NameSpace return namespaced filesystem
-func (fs *AssetFileSystem) NameSpace(nameSpace string) api.NameSpacedInterface {
+func (fs *AssetFileSystem) NameSpace(nameSpace string) assetfsapi.NameSpacedInterface {
 	var (
 		ns *AssetFileSystem
 		ok bool
@@ -199,25 +230,25 @@ func (fs *AssetFileSystem) NameSpace(nameSpace string) api.NameSpacedInterface {
 	return fs
 }
 
-func (fs *AssetFileSystem) newPathNameSpace(pth string) api.NameSpacedInterface {
+func (fs *AssetFileSystem) newPathNameSpace(pth string) assetfsapi.NameSpacedInterface {
 	ns := &AssetFileSystem{nameSpace: pth, path: pth}
 	ns.parent = fs
 	ns.init()
 	return ns
 }
 
-func (fs *AssetFileSystem) newRawFS(pth string) api.Interface {
-	ns := &AssetFileSystem{paths: []string{pth}, path:fs.path}
+func (fs *AssetFileSystem) newRawFS(pth string) assetfsapi.Interface {
+	ns := &AssetFileSystem{paths: []string{pth}, path: fs.path}
 	rfs := &RawFileSystem{ns}
 	rfs.init()
 	return rfs
 }
 
-func (fs *AssetFileSystem) GetNameSpace() string {
+func (fs *AssetFileSystem) GetName() string {
 	return fs.nameSpace
 }
 
-func (fs *AssetFileSystem) GetParent() api.Interface {
+func (fs *AssetFileSystem) GetParent() assetfsapi.Interface {
 	return fs.parent
 }
 
@@ -240,11 +271,11 @@ func (fs *AssetFileSystem) eachPath(reverse bool, cb func(pth string) error) (er
 	return
 }
 
-func (fs *AssetFileSystem) ReadDir(dir string, cb api.CbWalkInfoFunc, skipDir bool) (err error) {
+func (fs *AssetFileSystem) ReadDir(dir string, cb assetfsapi.CbWalkInfoFunc, skipDir bool) (err error) {
 	return fs.readDir(dir, cb, false, skipDir)
 }
 
-func (fs *AssetFileSystem) readDir(dir string, cb api.CbWalkInfoFunc, parentLookup bool, skipDir bool) (err error) {
+func (fs *AssetFileSystem) readDir(dir string, cb assetfsapi.CbWalkInfoFunc, parentLookup bool, skipDir bool) (err error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -269,7 +300,7 @@ func (fs *AssetFileSystem) readDir(dir string, cb api.CbWalkInfoFunc, parentLook
 	}
 
 	dolsdir := func(root string) (err error) {
-		var inf api.FileInfo
+		var inf assetfsapi.FileInfo
 		var realPath, pth string
 		ites, err := ioutil.ReadDir(root)
 		if err != nil {
@@ -379,14 +410,14 @@ func (fs *AssetFileSystem) pathsFrom(dir string, cb func(pth string) error) (err
 	return x
 }
 
-func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*path_helpers.Path) {
+func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*fileutils.Dir) {
 	rec := len(recursive) > 0 && recursive[0]
 	fspath := fs.path
 	if fspath == "" {
 		fspath = "."
 	}
 	for _, pth := range fs.paths {
-		p = append(p, &path_helpers.Path{Real: pth, Alias: fspath})
+		p = append(p, &fileutils.Dir{Src: pth, Destation: fileutils.Destation{fspath}})
 	}
 	if rec && fs.nameSpaces != nil {
 		for _, ns := range fs.nameSpaces {
@@ -398,8 +429,8 @@ func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*path_helpers.Path) 
 
 func (fs *AssetFileSystem) NewRepository(pkg string) rapi.Interface {
 	repo := repository.NewRepository(pkg)
-	repo.Dumper(func(cb func(pth string, stat os.FileInfo, reader io.Reader) error) error {
-		return fs.Dump(func(info api.FileInfo) error {
+	repo.Dumper(func(cb func(pth string, stat os.FileInfo, reader io.Reader) error, ignore ...func(pth string) bool) error {
+		return fs.Dump(func(info assetfsapi.FileInfo) error {
 			if info.IsDir() {
 				return cb(info.Path(), info, nil)
 			}
@@ -409,7 +440,7 @@ func (fs *AssetFileSystem) NewRepository(pkg string) rapi.Interface {
 			}
 			defer reader.Close()
 			return cb(info.Path(), info, reader)
-		})
+		}, ignore...)
 	})
 	return repo
 }
@@ -421,7 +452,7 @@ func (fs *AssetFileSystem) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fs.handler.ServeHTTP(w, r)
 }
 
-func (fs *AssetFileSystem) RegisterPlugin(plugins ...api.Plugin) {
+func (fs *AssetFileSystem) RegisterPlugin(plugins ...assetfsapi.Plugin) {
 	for _, p := range plugins {
 		p.Init(fs)
 	}
@@ -438,30 +469,40 @@ func (fs *AssetFileSystem) RegisterPlugin(plugins ...api.Plugin) {
 	}
 	fs.plugins = append(fs.plugins, plugins...)
 }
-func (fs *AssetFileSystem) DumpFiles(cb func(info api.FileInfo) error) error {
+func (fs *AssetFileSystem) DumpFiles(cb func(info assetfsapi.FileInfo) error) error {
 	return fs.dump(true, cb)
 }
 
-func (fs *AssetFileSystem) Dump(cb func(info api.FileInfo) error) error {
-	return fs.dump(false, cb)
+func (fs *AssetFileSystem) Dump(cb func(info assetfsapi.FileInfo) error, ignore ...func(pth string) bool) error {
+	return fs.dump(false, cb, ignore...)
 }
 
-func (fs *AssetFileSystem) dump(onlyFiles bool, cb func(info api.FileInfo) error) error {
-	m := map[string]api.FileInfo{}
-	err := fs.WalkInfo(".", func(info api.FileInfo) error {
-		if info.Path() == "." {
+func (fs *AssetFileSystem) TreeNames(onlyFiles bool, ignore ...func(pth string) bool) (result []assetfsapi.FileInfo, err error) {
+	m := map[string]assetfsapi.FileInfo{}
+	err = fs.WalkInfo(".", func(info assetfsapi.FileInfo) error {
+		pth := info.Path()
+		if pth == "." {
 			return nil
 		}
 		if onlyFiles && info.IsDir() {
 			return nil
 		}
+		for _, ignore := range ignore {
+			if ignore(pth) {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
 		m[info.Path()] = info
 		return nil
-	}, api.WalkAll)
+	}, assetfsapi.WalkAll)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	names := make([]string, len(m))
+	result = make([]assetfsapi.FileInfo, len(m))
 	i := 0
 
 	for name, _ := range m {
@@ -471,8 +512,21 @@ func (fs *AssetFileSystem) dump(onlyFiles bool, cb func(info api.FileInfo) error
 
 	sort.Strings(names)
 
-	for _, name := range names {
-		err = cb(m[name])
+	for i, name := range names {
+		result[i] = m[name]
+		delete(m, name)
+	}
+
+	return result, nil
+}
+
+func (fs *AssetFileSystem) dump(onlyFiles bool, cb func(info assetfsapi.FileInfo) error, ignore ...func(pth string) bool) error {
+	files, err := fs.TreeNames(onlyFiles, ignore...)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		err = cb(f)
 		if err != nil {
 			return err
 		}

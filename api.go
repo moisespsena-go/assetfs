@@ -1,6 +1,6 @@
 package assetfs
 
-import "github.com/moisespsena/go-assetfs/api"
+import "github.com/moisespsena/go-assetfs/assetfsapi"
 
-type Interface = api.Interface
-type AssetInterface = api.AssetInterface
+type Interface = assetfsapi.Interface
+type AssetInterface = assetfsapi.AssetInterface

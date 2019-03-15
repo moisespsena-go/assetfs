@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/moisespsena/go-assetfs"
 	"fmt"
-	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/go-assetfs"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 )
 
 func main() {
@@ -12,7 +12,7 @@ func main() {
 	ns.RegisterPath("t/ns")
 	fs.RegisterPath("t/data")
 	fs.RegisterPath("t/data2")
-	fmt.Println("------walk info from NS 'z' -------")
+	/*fmt.Println("------walk info from NS 'z' -------")
 	ns.WalkInfo(".", func(info api.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
@@ -30,8 +30,8 @@ func main() {
 	fmt.Println("------ glob string from FS '.' -------")
 	matches, _ := fs.NewGlobString(">*.txt").Names()
 	fmt.Println(matches)
-	fmt.Println("------ FS '.' DUMP -------")
-	fs.Dump(func(info api.FileInfo) error {
+	fmt.Println("------ FS '.' DUMP -------")*/
+	fs.Dump(func(info assetfsapi.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
 	})
@@ -40,6 +40,7 @@ func main() {
 		fmt.Println(pth)
 		return nil
 	})*/
+	return
 	fmt.Println("---- paths from z/a/x.txt ---------")
 	fs.PathsFrom("z/a/x.txt", func(pth string) error {
 		fmt.Println(pth)

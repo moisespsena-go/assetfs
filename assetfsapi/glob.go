@@ -1,11 +1,11 @@
-package api
+package assetfsapi
 
 type GlobPattern interface {
 	Dir() string
 	Pattern() string
 	IsRecursive() bool
-	AllowDirs()bool
-	AllowFiles()bool
+	AllowDirs() bool
+	AllowFiles() bool
 	Recursive() GlobPattern
 	Match(value string) bool
 	Wrap(dir ...string) GlobPattern
@@ -20,9 +20,11 @@ type Glob interface {
 	Name(cb func(pth string, isDir bool) error) error
 	NameOrPanic(cb func(pth string, isDir bool) error)
 	Names() ([]string, error)
+	SortedNames() ([]string, error)
 	NamesOrPanic() []string
 	Info(cb func(info FileInfo) error) error
 	Infos() ([]FileInfo, error)
+	SortedInfos() (items []FileInfo, err error)
 	InfoOrPanic(cb func(info FileInfo) error)
 	InfosOrPanic() []FileInfo
 }

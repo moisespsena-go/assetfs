@@ -1,7 +1,7 @@
 package assetfs
 
 import (
-	"github.com/moisespsena/go-assetfs/api"
+	"github.com/moisespsena/go-assetfs/assetfsapi"
 )
 
 type Asset struct {
@@ -10,7 +10,7 @@ type Asset struct {
 	Data []byte
 }
 
-func NewAsset(path, name string, data []byte) api.AssetInterface {
+func NewAsset(path, name string, data []byte) assetfsapi.AssetInterface {
 	return &Asset{path, name, data}
 }
 

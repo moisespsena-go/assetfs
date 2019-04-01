@@ -105,7 +105,7 @@ func (r *Repository) BinFile() string {
 
 func (r *Repository) AbsPath(create ...bool) string {
 	if r.absPath == "" {
-		if absPath := path_helpers.ResolveGoSrcPath(filepath.Dir(r.PackagePath)); absPath != "" {
+		if _, absPath := path_helpers.ResolveGoSrcPath(filepath.Dir(r.PackagePath)); absPath != "" {
 			absPath = filepath.Join(absPath, filepath.Base(r.PackagePath))
 			if (len(create) != 0 && create[0]) && !path_helpers.IsExistingDir(absPath) {
 				perms, err := path_helpers.ResolvePerms(absPath)

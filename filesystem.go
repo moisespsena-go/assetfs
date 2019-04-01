@@ -15,7 +15,7 @@ import (
 	"github.com/moisespsena/go-assetfs/assetfsapi"
 	"github.com/moisespsena/go-assetfs/repository"
 	rapi "github.com/moisespsena/go-assetfs/repository/api"
-	"github.com/moisespsena/go-path-helpers"
+	"github.com/moisespsena-go/path-helpers"
 	"github.com/moisespsena/orderedmap"
 )
 

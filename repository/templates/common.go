@@ -3,7 +3,7 @@ package templates
 func Common() string {
 	return `package {{.Package}}
 
-import "github.com/moisespsena/go-path-helpers"
+import "github.com/moisespsena-go/path-helpers"
 
 var (
 	DIR = path_helpers.GetCalledDir(true)

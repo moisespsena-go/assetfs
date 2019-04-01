@@ -8,7 +8,7 @@ import (
 	"github.com/moisespsena-go/file-utils"
 	"github.com/moisespsena/go-assetfs/assetfsapi"
 	"github.com/moisespsena/go-error-wrap"
-	"github.com/moisespsena/go-path-helpers"
+	"github.com/moisespsena-go/path-helpers"
 )
 
 func SaveExecutable(assetName string, fs assetfsapi.Interface, dest string, force ...bool) (err error) {

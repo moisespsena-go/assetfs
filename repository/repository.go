@@ -14,7 +14,7 @@ import (
 	"github.com/moisespsena/go-assetfs/repository/api"
 	"github.com/moisespsena/go-assetfs/repository/templates"
 	"github.com/moisespsena/go-error-wrap"
-	"github.com/moisespsena/go-path-helpers"
+	"github.com/moisespsena-go/path-helpers"
 )
 
 const DefaultBS = 1024 * 1024 * 20

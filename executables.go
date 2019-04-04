@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/moisespsena-go/file-utils"
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 	"github.com/moisespsena-go/error-wrap"
 	"github.com/moisespsena-go/path-helpers"
 )

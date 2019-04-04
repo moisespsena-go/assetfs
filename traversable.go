@@ -1,7 +1,7 @@
 package assetfs
 
 import (
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 type Traversable struct {

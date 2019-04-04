@@ -11,8 +11,8 @@ import (
 	"github.com/moisespsena-go/file-utils"
 	"github.com/moisespsena-go/sortvalues"
 	"github.com/moisespsena-go/xbindata"
-	"github.com/moisespsena/go-assetfs/repository/api"
-	"github.com/moisespsena/go-assetfs/repository/templates"
+	"github.com/moisespsena-go/assetfs/repository/api"
+	"github.com/moisespsena-go/assetfs/repository/templates"
 	"github.com/moisespsena-go/error-wrap"
 	"github.com/moisespsena-go/path-helpers"
 )

@@ -7,7 +7,7 @@ import (
 
 	"github.com/moisespsena-go/io-common"
 
-	"github.com/moisespsena/go-assetfs/repository/api"
+	"github.com/moisespsena-go/assetfs/repository/api"
 )
 
 type FileInfo interface {

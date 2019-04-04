@@ -8,7 +8,7 @@ import (
 
 	"github.com/moisespsena-go/os-common"
 
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 	"github.com/moisespsena-go/path-helpers"
 )
 

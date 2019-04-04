@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"crypto/md5"
 	"path/filepath"
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 var cacheSince = time.Now().Format(http.TimeFormat)

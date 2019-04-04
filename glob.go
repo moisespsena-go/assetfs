@@ -6,7 +6,7 @@ import (
 
 	"github.com/gobwas/glob"
 	"github.com/gobwas/glob/syntax"
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 type GlobPatter = assetfsapi.GlobPattern

@@ -10,7 +10,7 @@ import (
 	"github.com/moisespsena-go/io-common"
 
 	"github.com/go-errors/errors"
-	"github.com/moisespsena/go-assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
 var (

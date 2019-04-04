@@ -40,7 +40,7 @@ type Repository struct {
 	Package           string
 	BindataCompileTag string
 	BindataCleanTag   string
-	BindataTag        string
+	BindataTag        []string
 	Templates         []*Template
 	prepareConfig     sortvalues.Sorter
 	Sources           []fileutils.Copier
@@ -59,7 +59,7 @@ type Repository struct {
 
 func NewRepository(packagePath string) *Repository {
 	return &Repository{PackagePath: packagePath, Package: filepath.Base(packagePath),
-		BindataCompileTag: "assetfs_bindataCompile", BindataTag: "assetfs_bindata", BindataCleanTag: "assetfs_bindataClean"}
+		BindataCompileTag: "assetfs_bindataCompile", BindataTag: []string{"assetfs_bindata"}, BindataCleanTag: "assetfs_bindataClean"}
 }
 
 func (r *Repository) PrepareConfig(f func(config *xbindata.Config), name ...string) (v api.PrepareConfigCallbackValueInterface) {

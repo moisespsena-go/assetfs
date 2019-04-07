@@ -267,7 +267,7 @@ func (r *Repository) Sync() {
 	config.Output = r.BinFile()
 	config.Prefix = sdest
 	config.FileSystem = true
-	config.Embed = true
+	config.Outlined = true
 
 	prepareConfig, err := r.prepareConfig.Sort()
 	if err != nil {

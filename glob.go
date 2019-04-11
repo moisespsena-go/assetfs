@@ -3,6 +3,7 @@ package assetfs
 import (
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/gobwas/glob"
 	"github.com/gobwas/glob/syntax"
@@ -87,6 +88,41 @@ func (gp NormalPattern) PathFormatter(formatter assetfsapi.PathFormatterFunc) as
 	return &gp
 }
 
+func SplitGlobPattern(ipattern string) (dir, pattern string) {
+	ds := "/"
+	parts := strings.Split(ipattern, ds)
+	var dirParts []string
+
+partsLoop:
+	for i, name := range parts {
+		for j, ln := 0, len(name); j < ln; j++ {
+			if syntax.Special(name[j]) {
+				pattern = strings.Join(parts[i:], ds)
+				break partsLoop
+			}
+		}
+		dirParts = append(dirParts, name)
+	}
+	dir = strings.Join(dirParts, ds)
+	if dir == "" {
+		dir = "."
+	}
+	return
+}
+
+// pattern: \f Files, \r dirs
+func NewSimpleGlobPattern(pattern string) assetfsapi.GlobPattern {
+	var dir string
+	dir, pattern = SplitGlobPattern(pattern)
+
+	base := GlobBase{dir, pattern, true, true, true, func(pth *string) {}}
+
+	if pattern != "" {
+		return &DefaultGlobPattern{base, glob.MustCompile(pattern)}
+	}
+	return &NormalPattern{base}
+}
+
 // pattern: \f Files, \r dirs
 func NewGlobPattern(pattern string) assetfsapi.GlobPattern {
 	recursive := pattern[0] == '>'
@@ -103,16 +139,11 @@ func NewGlobPattern(pattern string) assetfsapi.GlobPattern {
 		dirs = false
 		pattern = pattern[1:]
 	}
-	dir, pattern := path.Split(pattern)
-	var hasSpecial bool
-	for i := 0; i < len(pattern); i++ {
-		if syntax.Special(pattern[i]) {
-			hasSpecial = true
-			break
-		}
-	}
+	var dir string
+	dir, pattern = SplitGlobPattern(pattern)
+
 	base := GlobBase{dir, pattern, recursive, files, dirs, func(pth *string) {}}
-	if hasSpecial {
+	if pattern != "" {
 		return &DefaultGlobPattern{base, glob.MustCompile(pattern)}
 	}
 	return &NormalPattern{base}

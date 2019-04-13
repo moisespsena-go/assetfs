@@ -1,6 +1,7 @@
 package assetfs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -11,10 +12,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/moisespsena-go/file-utils"
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 	"github.com/moisespsena-go/assetfs/repository"
 	rapi "github.com/moisespsena-go/assetfs/repository/api"
+	"github.com/moisespsena-go/file-utils"
 	"github.com/moisespsena-go/path-helpers"
 	"github.com/moisespsena/orderedmap"
 )
@@ -75,7 +76,7 @@ func NewAssetFileSystem() *AssetFileSystem {
 func (fs *AssetFileSystem) init() {
 	fs.AssetGetterInterface = &AssetGetter{
 		fs: fs,
-		AssetFunc: func(name string) (data []byte, err error) {
+		AssetFunc: func(ctx context.Context, name string) (data []byte, err error) {
 			var asset assetfsapi.AssetInterface
 			asset, err = filesystemAsset(fs, name)
 			if err != nil {
@@ -83,7 +84,7 @@ func (fs *AssetFileSystem) init() {
 			}
 			return asset.GetData(), nil
 		},
-		AssetInfoFunc: func(path string) (assetfsapi.FileInfo, error) {
+		AssetInfoFunc: func(ctx context.Context, path string) (assetfsapi.FileInfo, error) {
 			return filesystemAssetInfo(fs, path)
 		},
 	}

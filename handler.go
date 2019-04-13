@@ -1,13 +1,14 @@
 package assetfs
 
 import (
+	"crypto/md5"
 	"fmt"
 	"mime"
-	"time"
-	"strings"
 	"net/http"
-	"crypto/md5"
 	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
@@ -35,7 +36,11 @@ func HTTPStaticHandler(fs assetfsapi.Interface) http.Handler {
 		requestPath = strings.TrimPrefix(requestPath, "/")
 
 		if asset, err := fs.Asset(requestPath); err == nil {
-			data := asset.GetData()
+			var data []byte
+			if data, err = asset.Data(); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			etag := fmt.Sprintf("%x", md5.Sum(data))
 			if r.Header.Get("If-None-Match") == etag {
 				w.WriteHeader(http.StatusNotModified)

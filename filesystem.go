@@ -3,18 +3,18 @@ package assetfs
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/moisespsena-go/assetfs/local"
+
 	"github.com/moisespsena-go/assetfs/assetfsapi"
-	"github.com/moisespsena-go/assetfs/repository"
-	rapi "github.com/moisespsena-go/assetfs/repository/api"
 	"github.com/moisespsena-go/file-utils"
 	"github.com/moisespsena-go/path-helpers"
 	"github.com/moisespsena/orderedmap"
@@ -43,15 +43,16 @@ type AssetFileSystem struct {
 	callbacks     []assetfsapi.PathRegisterCallback
 	handler       http.Handler
 	plugins       []assetfsapi.Plugin
-	pathsFromFunc func(dir string, cb func(pth string) error) (err error)
+	pathsFromFunc func(ctx context.Context, dir string, cb func(pth string) error) (err error)
+	LocalSources  local.Sources
 }
 
 type RawFileSystem struct {
 	*AssetFileSystem
 }
 
-func (r *RawFileSystem) rawPathsFrom(pth string, cb func(pth string) error) error {
-	pth = filepath.Join(r.path, pth)
+func (r *RawFileSystem) rawPathsFrom(ctx context.Context, pth string, cb func(pth string) error) error {
+	pth = filepath.FromSlash(path.Join(r.path, pth))
 	_, err := os.Stat(pth)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -78,14 +79,14 @@ func (fs *AssetFileSystem) init() {
 		fs: fs,
 		AssetFunc: func(ctx context.Context, name string) (data []byte, err error) {
 			var asset assetfsapi.AssetInterface
-			asset, err = filesystemAsset(fs, name)
+			asset, err = filesystemAsset(ctx, fs, name)
 			if err != nil {
 				return
 			}
-			return asset.GetData(), nil
+			return asset.Data()
 		},
 		AssetInfoFunc: func(ctx context.Context, path string) (assetfsapi.FileInfo, error) {
-			return filesystemAssetInfo(fs, path)
+			return filesystemAssetInfo(ctx, fs, path)
 		},
 	}
 	fs.TraversableInterface = &Traversable{
@@ -284,7 +285,7 @@ func (fs *AssetFileSystem) readDir(dir string, cb assetfsapi.CbWalkInfoFunc, par
 	if !skipDir && fs.nameSpaces != nil {
 		if dir == "." {
 			for nsName, ns := range fs.nameSpaces {
-				err = cb(&NameSpaceFileInfo{FSFileInfoBase{fs, ns.path}, nsName, ns})
+				err = cb(&NameSpaceFileInfo{assetfsapi.NewCleanedBasicFileInfo(ns.path, nsName), ns})
 				if err != nil {
 					return err
 				}
@@ -315,9 +316,9 @@ func (fs *AssetFileSystem) readDir(dir string, cb assetfsapi.CbWalkInfoFunc, par
 					return nil
 				}
 
-				inf = &RealDirFileInfo{&RealFileInfo{FSFileInfoBase{fs, pth}, info, realPath}}
+				inf = &RealDirFileInfo{&RealFileInfo{basicFileInfo(pth, info), realPath}}
 			} else {
-				inf = &RealFileInfo{FSFileInfoBase{fs, pth}, info, realPath}
+				inf = &RealFileInfo{basicFileInfo(pth, info), realPath}
 			}
 			err = cb(inf)
 			if err != nil {
@@ -356,17 +357,35 @@ func (fs *AssetFileSystem) readDir(dir string, cb assetfsapi.CbWalkInfoFunc, par
 	return
 }
 
-func (fs *AssetFileSystem) PathsFrom(pth string, cb func(pth string) error) (err error) {
-	err = fs.pathsFrom(pth, cb)
+func (fs *AssetFileSystem) PathsFrom(ctx context.Context, pth string, cb func(pth string) error) (err error) {
+	var parent = fs
+	for parent != nil {
+		if parent.parent == nil {
+			break
+		}
+		parent = parent.parent.(*AssetFileSystem)
+	}
+
+	for _, name := range local.GetLocalNames(ctx) {
+		if src := fs.LocalSources.Get(name); src != nil {
+			if dirPth, ok := src.GetDir(pth); ok {
+				if err = cb(dirPth); err != nil {
+					return
+				}
+			}
+		}
+	}
+
+	err = fs.pathsFrom(ctx, pth, cb)
 	if err == io.EOF {
 		return nil
 	}
 	return
 }
 
-func (fs *AssetFileSystem) pathsFrom(dir string, cb func(pth string) error) (err error) {
+func (fs *AssetFileSystem) pathsFrom(ctx context.Context, dir string, cb func(pth string) error) (err error) {
 	if fs.pathsFromFunc != nil {
-		return fs.pathsFromFunc(dir, cb)
+		return fs.pathsFromFunc(ctx, dir, cb)
 	}
 
 	if dir == "" {
@@ -378,16 +397,17 @@ func (fs *AssetFileSystem) pathsFrom(dir string, cb func(pth string) error) (err
 		prefix := ""
 		for parent != nil {
 			for _, pth := range parent.paths {
-				pth = filepath.Join(pth, prefix)
-				_, err := os.Stat(pth)
-				if err != nil {
+				pth = path.Join(pth, prefix)
+
+				if _, err = os.Stat(pth); err != nil {
 					if os.IsNotExist(err) {
+						err = nil
 						continue
 					}
 					return err
 				}
-				err = cb(pth)
-				if err != nil {
+
+				if err = cb(pth); err != nil {
 					return err
 				}
 			}
@@ -403,11 +423,11 @@ func (fs *AssetFileSystem) pathsFrom(dir string, cb func(pth string) error) (err
 	if fs.nameSpaces != nil {
 		parts := strings.SplitN(dir, string(os.PathSeparator), 2)
 		if ns, ok := fs.nameSpaces[parts[0]]; ok {
-			return ns.pathsFrom(parts[1], cb)
+			return ns.pathsFrom(ctx, parts[1], cb)
 		}
 	}
 
-	x := fs.newPathNameSpace(dir).(*AssetFileSystem).pathsFrom(".", cb)
+	x := fs.newPathNameSpace(dir).(*AssetFileSystem).pathsFrom(ctx, ".", cb)
 	return x
 }
 
@@ -426,24 +446,6 @@ func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*fileutils.Dir) {
 		}
 	}
 	return
-}
-
-func (fs *AssetFileSystem) NewRepository(pkg string) rapi.Interface {
-	repo := repository.NewRepository(pkg)
-	repo.Dumper(func(cb func(pth string, stat os.FileInfo, reader io.Reader) error, ignore ...func(pth string) bool) error {
-		return fs.Dump(func(info assetfsapi.FileInfo) error {
-			if info.IsDir() {
-				return cb(info.Path(), info, nil)
-			}
-			reader, err := info.Reader()
-			if err != nil {
-				return fmt.Errorf("Get Reader of %q [%q] fail: %v", info.Path(), info.RealPath(), err)
-			}
-			defer reader.Close()
-			return cb(info.Path(), info, reader)
-		}, ignore...)
-	})
-	return repo
 }
 
 func (fs *AssetFileSystem) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -470,15 +472,24 @@ func (fs *AssetFileSystem) RegisterPlugin(plugins ...assetfsapi.Plugin) {
 	}
 	fs.plugins = append(fs.plugins, plugins...)
 }
+
 func (fs *AssetFileSystem) DumpFiles(cb func(info assetfsapi.FileInfo) error) error {
-	return fs.dump(true, cb)
+	return fs.dump(nil, true, cb)
+}
+
+func (fs *AssetFileSystem) DumpFilesC(ctx context.Context, cb func(info assetfsapi.FileInfo) error) error {
+	return fs.dump(ctx, true, cb)
 }
 
 func (fs *AssetFileSystem) Dump(cb func(info assetfsapi.FileInfo) error, ignore ...func(pth string) bool) error {
-	return fs.dump(false, cb, ignore...)
+	return fs.dump(nil, false, cb, ignore...)
 }
 
-func (fs *AssetFileSystem) TreeNames(onlyFiles bool, ignore ...func(pth string) bool) (result []assetfsapi.FileInfo, err error) {
+func (fs *AssetFileSystem) DumpC(ctx context.Context, cb func(info assetfsapi.FileInfo) error, ignore ...func(pth string) bool) error {
+	return fs.dump(ctx, false, cb, ignore...)
+}
+
+func (fs *AssetFileSystem) TreeNames(ctx context.Context, onlyFiles bool, ignore ...func(pth string) bool) (result []assetfsapi.FileInfo, err error) {
 	m := map[string]assetfsapi.FileInfo{}
 	err = fs.WalkInfo(".", func(info assetfsapi.FileInfo) error {
 		pth := info.Path()
@@ -496,7 +507,21 @@ func (fs *AssetFileSystem) TreeNames(onlyFiles bool, ignore ...func(pth string) 
 				return nil
 			}
 		}
+
+		if !info.IsDir() {
+			for _, localName := range local.GetLocalNames(ctx) {
+				if src := fs.LocalSources.Get(localName); localAssets != nil {
+					pth := info.Path()
+					if rpth, stat, ok := src.Get(pth); ok {
+						m[info.Path()] = &RealFileInfo{basicFileInfo(pth, stat), rpth}
+						return nil
+					}
+				}
+			}
+		}
+
 		m[info.Path()] = info
+
 		return nil
 	}, assetfsapi.WalkAll)
 	if err != nil {
@@ -521,8 +546,8 @@ func (fs *AssetFileSystem) TreeNames(onlyFiles bool, ignore ...func(pth string) 
 	return result, nil
 }
 
-func (fs *AssetFileSystem) dump(onlyFiles bool, cb func(info assetfsapi.FileInfo) error, ignore ...func(pth string) bool) error {
-	files, err := fs.TreeNames(onlyFiles, ignore...)
+func (fs *AssetFileSystem) dump(ctx context.Context, onlyFiles bool, cb func(info assetfsapi.FileInfo) error, ignore ...func(pth string) bool) error {
+	files, err := fs.TreeNames(ctx, onlyFiles, ignore...)
 	if err != nil {
 		return err
 	}

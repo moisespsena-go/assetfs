@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/moisespsena-go/assetfs/assetfsapi"
-	"github.com/moisespsena-go/error-wrap"
 	"github.com/moisespsena-go/os-common"
 )
 
@@ -39,11 +38,8 @@ func (f *AssetGetter) AssetC(ctx context.Context, path string) (asset assetfsapi
 		}
 		return nil, &oscommon.PathError{path, err}
 	}
-	data, err := info.Data()
-	if err != nil {
-		return nil, errwrap.Wrap(err, "Read data")
-	}
-	return &FileInfoAsset{info, path, data}, nil
+
+	return info.(assetfsapi.AssetInterface), nil
 }
 
 func (f *AssetGetter) Asset(path string) (asset assetfsapi.AssetInterface, err error) {

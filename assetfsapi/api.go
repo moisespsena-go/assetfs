@@ -5,20 +5,36 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/moisespsena-go/io-common"
-
-	"github.com/moisespsena-go/assetfs/repository/api"
 )
 
-type FileInfo interface {
+type BasicFileInfo interface {
 	os.FileInfo
-	RealPath() string
 	Path() string
+}
+
+type BasicFileInfoWithChangedTime interface {
+	BasicFileInfo
+	ChangeTime() time.Time
+}
+
+type FileContents interface {
+	Data() ([]byte, error)
+	String() (string, error)
+}
+
+type RFileInfo interface {
+	BasicFileInfo
 	Reader() (iocommon.ReadSeekCloser, error)
+	RealPath() string
+}
+
+type FileInfo interface {
+	RFileInfo
 	Writer() (io.WriteCloser, error)
 	Appender() (io.WriteCloser, error)
-	Data() ([]byte, error)
 	Type() FileType
 }
 
@@ -28,10 +44,10 @@ type DirFileInfo interface {
 }
 
 type AssetInterface interface {
-	GetName() string
-	GetData() []byte
-	GetString() string
-	GetPath() string
+	Name() string
+	Data() ([]byte, error)
+	DataS() (string, error)
+	Path() string
 }
 
 type AssetGetterInterface interface {
@@ -78,7 +94,6 @@ type Interface interface {
 	NameSpace(nameSpace string) NameSpacedInterface
 	GetPath() string
 	GetParent() Interface
-	NewRepository(pkg string) api.Interface
 	RegisterPlugin(plugins ...Plugin)
 	DumpFiles(cb func(info FileInfo) error) error
 	Dump(cb func(info FileInfo) error, ignore ...func(pth string) bool) error

@@ -1,10 +1,14 @@
 package assetfs
 
 import (
+	"context"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/moisespsena-go/assetfs/local"
 
 	"github.com/moisespsena-go/os-common"
 
@@ -12,27 +16,7 @@ import (
 	"github.com/moisespsena-go/path-helpers"
 )
 
-type FileInfoAsset struct {
-	info assetfsapi.FileInfo
-	name string
-	data []byte
-}
-
-func (a *FileInfoAsset) GetName() string {
-	return a.name
-}
-
-func (a *FileInfoAsset) GetData() []byte {
-	return a.data
-}
-
-func (a *FileInfoAsset) GetString() string {
-	return string(a.data)
-}
-
-func (a *FileInfoAsset) GetPath() string {
-	return a.info.RealPath()
-}
+var basicFileInfo = assetfsapi.OsFileInfoToBasic
 
 // Names list matched files from assetfs
 func filesystemGlob(fs *AssetFileSystem, pattern assetfsapi.GlobPattern, cb func(pth string, isDir bool) error) error {
@@ -74,43 +58,40 @@ func filesystemGlobInfo(fs *AssetFileSystem, pattern assetfsapi.GlobPattern, cb 
 }
 
 // Asset get content with name from assetfs
-func filesystemAsset(fs *AssetFileSystem, name string) (assetfsapi.AssetInterface, error) {
-	info, err := filesystemAssetInfo(fs, name)
+func filesystemAsset(ctx context.Context, fs *AssetFileSystem, name string) (assetfsapi.AssetInterface, error) {
+	info, err := filesystemAssetInfo(ctx, fs, name)
 	if err != nil {
 		return nil, err
 	}
-	data, err := info.Data()
+	var f local.File
+	f.FileInfo = info
 	if err != nil {
 		return nil, err
 	}
-	return &FileInfoAsset{info, name, data}, nil
+	return &f, nil
 }
 
-func filesystemAssetInfo(fs *AssetFileSystem, pth string) (info assetfsapi.FileInfo, err error) {
-	var r string
-	dir, base := filepath.Split(pth)
-	err = fs.PathsFrom(dir, func(pth string) error {
-		pth = filepath.Join(pth, base)
-		if _, err := os.Stat(pth); err == nil {
+func filesystemAssetInfo(ctx context.Context, fs *AssetFileSystem, pth string) (info assetfsapi.FileInfo, err error) {
+	var (
+		r    string
+		stat os.FileInfo
+	)
+	dir, base := path.Split(pth)
+	err = fs.PathsFrom(ctx, dir, func(pth string) (err error) {
+		pth = filepath.FromSlash(path.Join(pth, base))
+		if stat, err = os.Stat(pth); err == nil {
 			r = pth
 			return io.EOF
 		}
 		return nil
 	})
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return nil, err
 	}
 	if r == "" {
 		return nil, oscommon.ErrNotFound(pth)
 	}
-	stat, err := os.Stat(r)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, oscommon.ErrNotFound(pth)
-		}
-		return nil, err
-	}
-	return &RealFileInfo{FSFileInfoBase{fs, pth}, stat, r}, nil
+	return &RealFileInfo{basicFileInfo(pth, stat), r}, nil
 }
 
 func filesystemWalk(fs *AssetFileSystem, dir string, cb assetfsapi.CbWalkInfoFunc, mode assetfsapi.WalkMode) (err error) {
@@ -128,9 +109,9 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb assetfsapi.CbWalkInfoFun
 					}
 					switch t := info.(type) {
 					case *RealDirFileInfo:
-						t.path = filepath.Join(npth, t.path)
+						assetfsapi.SetBasicFileInfoPath(t.BasicFileInfo, filepath.Join(npth, t.Path()))
 					case *RealFileInfo:
-						t.path = filepath.Join(npth, t.path)
+						assetfsapi.SetBasicFileInfoPath(t.BasicFileInfo, filepath.Join(npth, t.Path()))
 					}
 					return cb(info)
 				}, mode|assetfsapi.WalkNameSpacesLookUp^assetfsapi.WalkParentLookUp)
@@ -161,14 +142,12 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb assetfsapi.CbWalkInfoFun
 					if !mode.IsDirs() {
 						return nil
 					}
-
-					inf = &RealDirFileInfo{&RealFileInfo{FSFileInfoBase{fs, pth}, info, realPath}}
 				} else {
 					if !mode.IsFiles() {
 						return nil
 					}
-					inf = &RealFileInfo{FSFileInfoBase{fs, pth}, info, realPath}
 				}
+				inf = &RealDirFileInfo{&RealFileInfo{basicFileInfo(pth, info), realPath}}
 				return cb(inf)
 			})
 		})
@@ -208,14 +187,12 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb assetfsapi.CbWalkInfoFun
 						if !mode.IsDirs() {
 							return nil
 						}
-
-						inf = &RealDirFileInfo{&RealFileInfo{FSFileInfoBase{fs, pth}, info, realPath}}
 					} else {
 						if !mode.IsFiles() {
 							return nil
 						}
-						inf = &RealFileInfo{FSFileInfoBase{fs, pth}, info, realPath}
 					}
+					inf = &RealDirFileInfo{&RealFileInfo{basicFileInfo(pth, info), realPath}}
 					return cb(inf)
 				})
 			}

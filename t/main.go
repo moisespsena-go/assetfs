@@ -1,17 +1,24 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/moisespsena-go/assetfs"
 	"github.com/moisespsena-go/assetfs/assetfsapi"
+	"github.com/moisespsena-go/assetfs/local"
 )
 
 func main() {
 	fs := assetfs.NewAssetFileSystem()
-	ns := fs.NameSpace("z")
+	ns := fs.NameSpace("z").(*assetfs.AssetFileSystem)
 	ns.RegisterPath("t/ns")
+	fs.LocalSources.Register("my_dir", "t/user_dir")
 	fs.RegisterPath("t/data")
 	fs.RegisterPath("t/data2")
+
+	asset := fs.AssetOrPanicC(local.SetLocalNames(context.Background(), "my_dir"), "z/sub-ns/nsf.txt")
+	data, _ := asset.DataS()
+	println(data)
 	/*fmt.Println("------walk info from NS 'z' -------")
 	ns.WalkInfo(".", func(info api.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
@@ -31,7 +38,7 @@ func main() {
 	matches, _ := fs.NewGlobString(">*.txt").Names()
 	fmt.Println(matches)
 	fmt.Println("------ FS '.' DUMP -------")*/
-	fs.Dump(func(info assetfsapi.FileInfo) error {
+	fs.DumpC(local.SetLocalNames(context.Background(), "my_dir"), func(info assetfsapi.FileInfo) error {
 		fmt.Println(info, "->", info.RealPath())
 		return nil
 	})
@@ -42,13 +49,13 @@ func main() {
 	})*/
 	return
 	fmt.Println("---- paths from z/a/x.txt ---------")
-	fs.PathsFrom("z/a/x.txt", func(pth string) error {
+	fs.PathsFrom(local.SetLocalNames(context.Background(), "my_dir"), "z/a/x.txt", func(pth string) error {
 		fmt.Println(pth)
 		return nil
 	})
-/*	fmt.Println("-------------")
-	asset, err := fs.Asset("z/a/x.txt")
-	fmt.Println(string(asset.GetData()))
-	fmt.Println(err)*/
+	/*	fmt.Println("-------------")
+		asset, err := fs.Asset("z/a/x.txt")
+		fmt.Println(string(asset.GetData()))
+		fmt.Println(err)*/
 
 }

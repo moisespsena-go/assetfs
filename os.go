@@ -4,6 +4,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -19,36 +20,13 @@ var (
 	IS_NS_ERROR  = errors.New("Is name space.")
 )
 
-type PrivateFSFileInfoInterface interface {
-	PrivateSetFS(fs Interface)
-	PrivateSetPath(path string)
-}
-
-type FSFileInfoBase struct {
-	fs   assetfsapi.Interface
-	path string
-}
-
-func (f *FSFileInfoBase) FS() assetfsapi.Interface {
-	return f.fs
-}
-
-func (f *FSFileInfoBase) Path() string {
-	return f.path
-}
-
-func (f *FSFileInfoBase) PrivateSetFS(fs Interface) {
-	f.fs = fs
-}
-
-func (f *FSFileInfoBase) PrivateSetPath(path string) {
-	f.path = path
-}
-
 type RealFileInfo struct {
-	FSFileInfoBase
-	os.FileInfo
+	assetfsapi.BasicFileInfo
 	realPath string
+}
+
+func NewRealFileInfo(basicFileInfo assetfsapi.BasicFileInfo, realPath string) *RealFileInfo {
+	return &RealFileInfo{BasicFileInfo: basicFileInfo, realPath: realPath}
 }
 
 func (RealFileInfo) Type() assetfsapi.FileType {
@@ -80,10 +58,16 @@ func (rf *RealFileInfo) Data() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		reader.Close()
-	}()
+	defer reader.Close()
 	return ioutil.ReadAll(reader)
+}
+
+func (rf *RealFileInfo) DataS() (string, error) {
+	b, err := rf.Data()
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 type RealDirFileInfo struct {
@@ -121,7 +105,7 @@ func (d *RealDirFileInfo) ReadDir(cb func(child assetfsapi.FileInfo) error) (err
 	}
 
 	for _, info := range infos {
-		rinfo := &RealFileInfo{FSFileInfoBase{d.fs, filepath.Join(d.path, info.Name())}, info, filepath.Join(d.realPath, info.Name())}
+		rinfo := &RealFileInfo{basicFileInfo(path.Join(d.Path(), info.Name()), info), filepath.Join(d.realPath, info.Name())}
 		if info.IsDir() {
 			err = cb(&RealDirFileInfo{rinfo})
 		} else {
@@ -135,18 +119,14 @@ func (d *RealDirFileInfo) ReadDir(cb func(child assetfsapi.FileInfo) error) (err
 }
 
 type NameSpaceFileInfo struct {
-	FSFileInfoBase
-	name string
-	ns   assetfsapi.Interface
+	assetfsapi.BasicFileInfo
+	ns assetfsapi.Interface
 }
 
 func (NameSpaceFileInfo) Type() assetfsapi.FileType {
 	return assetfsapi.FileTypeNameSpace
 }
 
-func (ns *NameSpaceFileInfo) Name() string {
-	return ns.name
-}
 func (ns *NameSpaceFileInfo) Size() int64 {
 	return -1
 }
@@ -179,10 +159,10 @@ func (ns *NameSpaceFileInfo) Data() ([]byte, error) {
 }
 
 func (ns *NameSpaceFileInfo) ReadDir(cb func(child assetfsapi.FileInfo) error) (err error) {
-	return ns.fs.ReadDir(".", cb, false)
+	return ns.ns.ReadDir(".", cb, false)
 }
 func (ns *NameSpaceFileInfo) RealPath() string {
-	return ns.fs.GetPath()
+	return ns.ns.GetPath()
 }
 
 func (ns *NameSpaceFileInfo) String() string {

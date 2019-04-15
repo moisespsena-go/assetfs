@@ -53,12 +53,12 @@ type AssetInterface interface {
 type AssetGetterInterface interface {
 	Asset(path string) (AssetInterface, error)
 	AssetC(ctx context.Context, path string) (asset AssetInterface, err error)
-	AssetOrPanic(path string) AssetInterface
-	AssetOrPanicC(ctx context.Context, path string) AssetInterface
+	MustAsset(path string) AssetInterface
+	MustAssetC(ctx context.Context, path string) AssetInterface
 	AssetInfo(path string) (FileInfo, error)
 	AssetInfoC(ctx context.Context, path string) (FileInfo, error)
-	AssetInfoOrPanic(path string) FileInfo
-	AssetInfoOrPanicC(ctx context.Context, path string) FileInfo
+	MustAssetInfo(path string) FileInfo
+	MustAssetInfoC(ctx context.Context, path string) FileInfo
 	AssetReader() AssetReaderFunc
 	AssetReaderC() AssetReaderFuncC
 	Provider(providers ...Interface)

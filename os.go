@@ -70,6 +70,22 @@ func (rf *RealFileInfo) DataS() (string, error) {
 	return string(b), nil
 }
 
+func (rf *RealFileInfo) MustData() []byte {
+	if b, err := rf.Data(); err != nil {
+		panic(err)
+	} else {
+		return b
+	}
+}
+
+func (rf *RealFileInfo) MustDataS() string {
+	if b, err := rf.Data(); err != nil {
+		panic(err)
+	} else {
+		return string(b)
+	}
+}
+
 type RealDirFileInfo struct {
 	*RealFileInfo
 }

@@ -46,7 +46,7 @@ func (f *AssetGetter) Asset(path string) (asset assetfsapi.AssetInterface, err e
 	return f.AssetC(nil, path)
 }
 
-func (f *AssetGetter) AssetOrPanicC(ctx context.Context, path string) assetfsapi.AssetInterface {
+func (f *AssetGetter) MustAssetC(ctx context.Context, path string) assetfsapi.AssetInterface {
 	asset, err := f.AssetC(ctx, path)
 	if err != nil {
 		panic(err)
@@ -54,7 +54,7 @@ func (f *AssetGetter) AssetOrPanicC(ctx context.Context, path string) assetfsapi
 	return asset
 }
 
-func (f *AssetGetter) AssetOrPanic(path string) assetfsapi.AssetInterface {
+func (f *AssetGetter) MustAsset(path string) assetfsapi.AssetInterface {
 	asset, err := f.Asset(path)
 	if err != nil {
 		panic(err)
@@ -70,7 +70,7 @@ func (f *AssetGetter) AssetInfo(path string) (assetfsapi.FileInfo, error) {
 	return f.AssetInfoFunc(nil, path)
 }
 
-func (f *AssetGetter) AssetInfoOrPanic(path string) assetfsapi.FileInfo {
+func (f *AssetGetter) MustAssetInfo(path string) assetfsapi.FileInfo {
 	info, err := f.AssetInfo(path)
 	if err != nil {
 		panic(err)
@@ -78,7 +78,7 @@ func (f *AssetGetter) AssetInfoOrPanic(path string) assetfsapi.FileInfo {
 	return info
 }
 
-func (f *AssetGetter) AssetInfoOrPanicC(ctx context.Context, path string) assetfsapi.FileInfo {
+func (f *AssetGetter) MustAssetInfoC(ctx context.Context, path string) assetfsapi.FileInfo {
 	info, err := f.AssetInfoC(ctx, path)
 	if err != nil {
 		panic(err)

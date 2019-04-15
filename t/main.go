@@ -19,7 +19,7 @@ func main() {
 	fs.RegisterPath("t/data")
 	fs.RegisterPath("t/data2")
 
-	asset := fs.AssetOrPanicC(local.SetNames(context.Background(), "my_dir"), "z/sub-ns/nsf.txt")
+	asset := fs.MustAssetC(local.SetNames(context.Background(), "my_dir"), "z/sub-ns/nsf.txt")
 	data, _ := asset.DataS()
 	println(data)
 	/*fmt.Println("------walk info from NS 'z' -------")

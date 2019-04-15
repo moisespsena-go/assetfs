@@ -47,6 +47,8 @@ type AssetInterface interface {
 	Name() string
 	Data() ([]byte, error)
 	DataS() (string, error)
+	MustData() []byte
+	MustDataS() string
 	Path() string
 }
 

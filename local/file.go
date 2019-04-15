@@ -9,6 +9,8 @@ import (
 
 	api "github.com/moisespsena-go/assetfs/assetfsapi"
 
+	"fmt"
+
 	"github.com/moisespsena-go/io-common"
 )
 
@@ -76,9 +78,7 @@ func (f *File) Data() ([]byte, error) {
 	if r, err := f.Reader(); err != nil {
 		return nil, err
 	} else {
-		defer func() {
-			_ = r.Close()
-		}()
+		defer r.Close()
 		return ioutil.ReadAll(r)
 	}
 }
@@ -89,4 +89,16 @@ func (f *File) DataS() (string, error) {
 	} else {
 		return string(b), nil
 	}
+}
+
+func (f *File) MustData() []byte {
+	if b, err := f.Data(); err != nil {
+		panic(fmt.Errorf("[local file %q] MustaData: %v", f.realPath, err))
+	} else {
+		return b
+	}
+}
+
+func (f *File) MustDataS() string {
+	return string(f.MustData())
 }

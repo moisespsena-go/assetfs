@@ -3,6 +3,7 @@ package assetfs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -35,6 +36,8 @@ func (a *assetFileSystemNameSpaces) Get(key string) (*AssetFileSystem, bool) {
 type AssetFileSystem struct {
 	assetfsapi.AssetGetterInterface
 	assetfsapi.TraversableInterface
+	local.LocalSourcesAttribute
+
 	parent        assetfsapi.Interface
 	paths         []string
 	path          string
@@ -44,7 +47,7 @@ type AssetFileSystem struct {
 	handler       http.Handler
 	plugins       []assetfsapi.Plugin
 	pathsFromFunc func(ctx context.Context, dir string, cb func(pth string) error) (err error)
-	LocalSources  local.Sources
+	localSources  assetfsapi.LocalSourceRegister
 }
 
 type RawFileSystem struct {
@@ -366,12 +369,14 @@ func (fs *AssetFileSystem) PathsFrom(ctx context.Context, pth string, cb func(pt
 		parent = parent.parent.(*AssetFileSystem)
 	}
 
-	for _, name := range local.GetLocalNames(ctx) {
-		if src := fs.LocalSources.Get(name); src != nil {
-			if dirPth, ok := src.GetDir(pth); ok {
-				if err = cb(dirPth); err != nil {
-					return
-				}
+	for _, src := range local.AllSources(fs.LocalSources(), ctx) {
+		if info, err := src.Get(pth); err != nil {
+			if !os.IsNotExist(err) {
+				return fmt.Errorf("source «%T» %s get info for %q failed: %v", src, src, pth, err)
+			}
+		} else if info.IsDir() {
+			if err = cb(info.Path()); err != nil {
+				return err
 			}
 		}
 	}
@@ -509,13 +514,14 @@ func (fs *AssetFileSystem) TreeNames(ctx context.Context, onlyFiles bool, ignore
 		}
 
 		if !info.IsDir() {
-			for _, localName := range local.GetLocalNames(ctx) {
-				if src := fs.LocalSources.Get(localName); localAssets != nil {
-					pth := info.Path()
-					if rpth, stat, ok := src.Get(pth); ok {
-						m[info.Path()] = &RealFileInfo{basicFileInfo(pth, stat), rpth}
-						return nil
+			for _, src := range local.AllSources(fs.LocalSources(), ctx) {
+				if srcInfo, err := src.Get(pth); err != nil {
+					if !os.IsNotExist(err) {
+						return fmt.Errorf("source «%T» %s get info for %q failed: %v", src, src, pth, err)
 					}
+				} else if !srcInfo.IsDir() {
+					m[info.Path()] = &RealFileInfo{basicFileInfo(pth, srcInfo), srcInfo.Path()}
+					return nil
 				}
 			}
 		}

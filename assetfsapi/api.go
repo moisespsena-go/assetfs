@@ -84,10 +84,20 @@ type Plugin interface {
 	PathRegisterCallback(fs Interface)
 }
 
+type LocalSourcesGetter interface {
+	LocalSources() LocalSourceRegister
+}
+
+type LocalSourcesAttribute interface {
+	LocalSourcesGetter
+	SetLocalSources(sources LocalSourceRegister)
+}
+
 type Interface interface {
 	AssetGetterInterface
 	AssetCompilerInterface
 	TraversableInterface
+	LocalSourcesAttribute
 	http.Handler
 	GetNameSpace(nameSpace string) (NameSpacedInterface, error)
 	NameSpaces() []NameSpacedInterface

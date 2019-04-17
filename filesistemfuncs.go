@@ -137,18 +137,18 @@ func filesystemWalk(fs *AssetFileSystem, dir string, cb assetfsapi.CbWalkInfoFun
 				if pth[0] == filepath.Separator {
 					pth = pth[1:]
 				}
-				var inf assetfsapi.FileInfo
+
 				if info.IsDir() {
 					if !mode.IsDirs() {
 						return nil
 					}
-				} else {
-					if !mode.IsFiles() {
-						return nil
-					}
+					return cb(&RealDirFileInfo{&RealFileInfo{basicFileInfo(pth, info), realPath}})
 				}
-				inf = &RealDirFileInfo{&RealFileInfo{basicFileInfo(pth, info), realPath}}
-				return cb(inf)
+
+				if !mode.IsFiles() {
+					return nil
+				}
+				return cb(&RealFileInfo{basicFileInfo(pth, info), realPath})
 			})
 		})
 		if err != nil {

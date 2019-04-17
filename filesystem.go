@@ -213,6 +213,11 @@ func (fs *AssetFileSystem) NameSpaces() (items []assetfsapi.NameSpacedInterface)
 
 // NameSpace return namespaced filesystem
 func (fs *AssetFileSystem) NameSpace(nameSpace string) assetfsapi.NameSpacedInterface {
+	return fs.NameSpaceFS(nameSpace)
+}
+
+// NameSpace return namespaced filesystem
+func (fs *AssetFileSystem) NameSpaceFS(nameSpace string) *AssetFileSystem {
 	var (
 		ns *AssetFileSystem
 		ok bool

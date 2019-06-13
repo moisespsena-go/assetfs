@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/moisespsena-go/assetfs/assetfsapi"
-	"github.com/moisespsena-go/os-common"
+	oscommon "github.com/moisespsena-go/os-common"
 )
 
 type AssetGetter struct {
@@ -32,11 +32,11 @@ func (f *AssetGetter) AssetC(ctx context.Context, path string) (asset assetfsapi
 					if oscommon.IsNotFound(err2) {
 						continue
 					}
-					return nil, &oscommon.PathError{path, err2}
+					return nil, &oscommon.PathError{Name: path, Err: err2}
 				}
 			}
 		}
-		return nil, &oscommon.PathError{path, err}
+		return
 	}
 
 	return info.(assetfsapi.AssetInterface), nil

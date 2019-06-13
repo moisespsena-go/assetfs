@@ -29,6 +29,10 @@ func NewRealFileInfo(basicFileInfo assetfsapi.BasicFileInfo, realPath string) *R
 	return &RealFileInfo{BasicFileInfo: basicFileInfo, realPath: realPath}
 }
 
+func (rf *RealFileInfo) GetFileInfo() os.FileInfo {
+	return rf.BasicFileInfo
+}
+
 func (RealFileInfo) Type() assetfsapi.FileType {
 	return assetfsapi.FileTypeReal | assetfsapi.FileTypeNormal
 }
@@ -141,6 +145,10 @@ type NameSpaceFileInfo struct {
 
 func (NameSpaceFileInfo) Type() assetfsapi.FileType {
 	return assetfsapi.FileTypeNameSpace
+}
+
+func (ns *NameSpaceFileInfo) GetFileInfo() os.FileInfo {
+	return ns.BasicFileInfo
 }
 
 func (ns *NameSpaceFileInfo) Size() int64 {

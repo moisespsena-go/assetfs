@@ -23,6 +23,10 @@ type File struct {
 	digest   *[sha256.Size]byte
 }
 
+func (f File) GetFileInfo() os.FileInfo {
+	return f.FileInfo
+}
+
 func (f *File) Writer() (io.WriteCloser, error) {
 	return os.Open(f.realPath)
 }

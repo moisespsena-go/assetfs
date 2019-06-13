@@ -460,7 +460,7 @@ func (fs *AssetFileSystem) GetPaths(recursive ...bool) (p []*fileutils.Dir) {
 
 func (fs *AssetFileSystem) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if fs.handler == nil {
-		fs.handler = HTTPStaticHandler(fs)
+		fs.handler = HttpStaticHandler(fs)
 	}
 	fs.handler.ServeHTTP(w, r)
 }

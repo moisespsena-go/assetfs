@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/moisespsena-go/io-common"
+	iocommon "github.com/moisespsena-go/io-common"
 )
 
 type BasicFileInfo interface {
@@ -36,6 +36,7 @@ type FileInfo interface {
 	Writer() (io.WriteCloser, error)
 	Appender() (io.WriteCloser, error)
 	Type() FileType
+	GetFileInfo() os.FileInfo
 }
 
 type DirFileInfo interface {

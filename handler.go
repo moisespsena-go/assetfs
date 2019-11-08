@@ -4,17 +4,18 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 	"time"
 
+	iocommon "github.com/moisespsena-go/io-common"
+
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
-var cacheSince = time.Now().Format(http.TimeFormat)
+var cacheSince = time.Now()
 
 type StaticHandler struct {
 	EtagTimeLife time.Duration
@@ -86,12 +87,6 @@ func (this *StaticHandler) getEtag(asset assetfsapi.FileInfo) (etag string, err 
 }
 
 func (this *StaticHandler) ServeAsset(w http.ResponseWriter, r *http.Request, pth string, notFound ...bool) {
-	if r.Header.Get("If-Modified-Since") == this.cacheSince {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	w.Header().Set("Last-Modified", this.cacheSince)
-
 	if fspath := RootPath(this.FS); fspath != "" {
 		pth = strings.TrimPrefix(pth, fspath)
 	}
@@ -99,29 +94,14 @@ func (this *StaticHandler) ServeAsset(w http.ResponseWriter, r *http.Request, pt
 	pth = strings.TrimPrefix(pth, "/")
 
 	if asset, err := this.FS.AssetInfoC(r.Context(), pth); err == nil {
-		var etag string
-		if etag, err = this.getEtag(asset); err != nil {
+		var rs iocommon.ReadSeekCloser
+		if rs, err = asset.Reader(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if r.Header.Get("If-None-Match") == etag {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
+		defer rs.Close()
 
-		if ctype := mime.TypeByExtension(filepath.Ext(pth)); ctype != "" {
-			w.Header().Set("Content-Type", ctype)
-		}
-
-		w.Header().Set("Cache-control", "private, must-revalidate, max-age=300")
-		w.Header().Set("ETag", etag)
-		var reader io.ReadCloser
-		if reader, err = asset.Reader(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer reader.Close()
-		io.Copy(w, reader)
+		http.ServeContent(w, r, path.Base(pth), cacheSince, rs)
 		return
 	}
 

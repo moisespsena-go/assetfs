@@ -5,10 +5,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/moisespsena-go/file-utils"
+	path_helpers "github.com/moisespsena-go/path-helpers"
+	"github.com/pkg/errors"
+
 	"github.com/moisespsena-go/assetfs/assetfsapi"
-	"github.com/moisespsena-go/error-wrap"
-	"github.com/moisespsena-go/path-helpers"
+	fileutils "github.com/moisespsena-go/file-utils"
 )
 
 func SaveExecutable(assetName string, fs assetfsapi.Interface, dest string, force ...bool) (err error) {
@@ -20,7 +21,7 @@ func SaveExecutable(assetName string, fs assetfsapi.Interface, dest string, forc
 	)
 
 	if asset, err = fs.AssetInfo(assetName); err != nil {
-		err = errwrap.Wrap(err, "Get Asset %q", assetName)
+		err = errors.Wrapf(err, "Get Asset %q", assetName)
 		return
 	}
 
@@ -32,7 +33,7 @@ func SaveExecutable(assetName string, fs assetfsapi.Interface, dest string, forc
 		} else if os.IsNotExist(err) {
 			err = nil
 		} else {
-			err = errwrap.Wrap(err, "Stat of %q", dest)
+			err = errors.Wrapf(err, "Stat of %q", dest)
 			return
 		}
 	}
@@ -44,14 +45,14 @@ func SaveExecutable(assetName string, fs assetfsapi.Interface, dest string, forc
 	var in io.ReadCloser
 
 	if in, err = asset.Reader(); err != nil {
-		err = errwrap.Wrap(err, "Get Reader of %q", assetName)
+		err = errors.Wrapf(err, "Get Reader of %q", assetName)
 		return
 	}
 
 	defer in.Close()
 
 	if err = fileutils.CopyReaderInfo(in, asset, dest); err != nil {
-		err = errwrap.Wrap(err, "`%s` executable %q creation failed", name, dest)
+		err = errors.Wrapf(err, "`%s` executable %q creation failed", name, dest)
 	}
 
 	return

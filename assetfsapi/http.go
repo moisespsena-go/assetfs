@@ -9,9 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/moisespsena-go/os-common"
+	iocommon "github.com/moisespsena-go/io-common"
+	oscommon "github.com/moisespsena-go/os-common"
 
-	"github.com/moisespsena-go/http-common"
+	httpcommon "github.com/moisespsena-go/http-common"
 )
 
 type HttpFileSystem struct {
@@ -46,7 +47,18 @@ func (fs *HttpFileSystem) Open(name string) (f http.File, err error) {
 	if asset.IsDir() {
 		return httpcommon.NewDir(fullName, httpAssetDirReader(fs.FS, fullName)), nil
 	}
-	f = httpcommon.NewFile(asset, asset.Reader)
+
+	f = httpcommon.NewFile(asset, func() (rsc iocommon.ReadSeekCloser, err error) {
+		var r io.ReadCloser
+		if r, err = asset.Reader(); err != nil {
+			return
+		}
+		var ok bool
+		if rsc, ok = r.(iocommon.ReadSeekCloser); ok {
+			return
+		}
+		return readCloseUnsupportSeeker{r}, nil
+	})
 	return
 }
 
@@ -78,4 +90,19 @@ func httpAssetDirReader(fs Interface, path string) func(count int) (items []os.F
 		}
 		return
 	}
+}
+
+type readCloseUnsupportSeeker struct {
+	io.ReadCloser
+}
+
+func (this readCloseUnsupportSeeker) RawReader() io.ReadCloser {
+	if rr, ok := this.ReadCloser.(RawReadGetter); ok {
+		return rr.RawReader()
+	}
+	return this.ReadCloser
+}
+
+func (readCloseUnsupportSeeker) Seek(int64, int) (int64, error) {
+	return 0, errors.New("seek is not supported")
 }

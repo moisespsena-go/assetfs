@@ -86,7 +86,14 @@ func (fs *AssetFileSystem) init() {
 			if err != nil {
 				return
 			}
-			return asset.Data()
+			var r io.ReadCloser
+			if r, err = asset.Reader(); err != nil {
+				return
+			}
+			if data, err = ioutil.ReadAll(r); err != nil {
+				return nil, err
+			}
+			return data, nil
 		},
 		AssetInfoFunc: func(ctx context.Context, path string) (assetfsapi.FileInfo, error) {
 			return filesystemAssetInfo(ctx, fs, path)

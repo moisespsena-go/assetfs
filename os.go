@@ -8,9 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/moisespsena-go/io-common"
-
 	"github.com/go-errors/errors"
+
 	"github.com/moisespsena-go/assetfs/assetfsapi"
 )
 
@@ -41,7 +40,7 @@ func (rf *RealFileInfo) RealPath() string {
 	return rf.realPath
 }
 
-func (rf *RealFileInfo) Reader() (iocommon.ReadSeekCloser, error) {
+func (rf *RealFileInfo) Reader() (io.ReadCloser, error) {
 	return os.Open(rf.realPath)
 }
 
@@ -57,39 +56,6 @@ func (rf *RealFileInfo) String() string {
 	return StringifyFileInfo(rf)
 }
 
-func (rf *RealFileInfo) Data() ([]byte, error) {
-	reader, err := rf.Reader()
-	if err != nil {
-		return nil, err
-	}
-	defer reader.Close()
-	return ioutil.ReadAll(reader)
-}
-
-func (rf *RealFileInfo) DataS() (string, error) {
-	b, err := rf.Data()
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-func (rf *RealFileInfo) MustData() []byte {
-	if b, err := rf.Data(); err != nil {
-		panic(err)
-	} else {
-		return b
-	}
-}
-
-func (rf *RealFileInfo) MustDataS() string {
-	if b, err := rf.Data(); err != nil {
-		panic(err)
-	} else {
-		return string(b)
-	}
-}
-
 type RealDirFileInfo struct {
 	*RealFileInfo
 }
@@ -98,7 +64,7 @@ func (RealDirFileInfo) Type() assetfsapi.FileType {
 	return assetfsapi.FileTypeReal | assetfsapi.FileTypeDir
 }
 
-func (rf *RealDirFileInfo) Reader() (iocommon.ReadSeekCloser, error) {
+func (rf *RealDirFileInfo) Reader() (io.ReadCloser, error) {
 	return nil, IS_DIR_ERROR
 }
 
@@ -107,10 +73,6 @@ func (rf *RealDirFileInfo) Writer() (io.WriteCloser, error) {
 }
 
 func (rf *RealDirFileInfo) Appender() (io.WriteCloser, error) {
-	return nil, IS_DIR_ERROR
-}
-
-func (rf *RealDirFileInfo) Data() ([]byte, error) {
 	return nil, IS_DIR_ERROR
 }
 
@@ -167,18 +129,10 @@ func (ns *NameSpaceFileInfo) Sys() interface{} {
 	return nil
 }
 
-func (ns *NameSpaceFileInfo) Reader() (iocommon.ReadSeekCloser, error) {
+func (ns *NameSpaceFileInfo) Reader() (io.ReadCloser, error) {
 	return nil, IS_NS_ERROR
 }
 func (ns *NameSpaceFileInfo) Writer() (io.WriteCloser, error) {
-	return nil, IS_NS_ERROR
-}
-
-func (ns *NameSpaceFileInfo) Appender() (io.WriteCloser, error) {
-	return nil, IS_NS_ERROR
-}
-
-func (ns *NameSpaceFileInfo) Data() ([]byte, error) {
 	return nil, IS_NS_ERROR
 }
 

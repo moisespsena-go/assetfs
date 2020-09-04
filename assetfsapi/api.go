@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"os"
 	"time"
-
-	iocommon "github.com/moisespsena-go/io-common"
 )
 
 type BasicFileInfo interface {
@@ -20,23 +18,16 @@ type BasicFileInfoWithChangedTime interface {
 	ChangeTime() time.Time
 }
 
-type FileContents interface {
-	Data() ([]byte, error)
-	String() (string, error)
-}
-
 type RFileInfo interface {
 	BasicFileInfo
-	Reader() (iocommon.ReadSeekCloser, error)
 	RealPath() string
 }
 
 type FileInfo interface {
 	RFileInfo
-	Writer() (io.WriteCloser, error)
-	Appender() (io.WriteCloser, error)
 	Type() FileType
 	GetFileInfo() os.FileInfo
+	Reader() (io.ReadCloser, error)
 }
 
 type DirFileInfo interface {
@@ -46,11 +37,8 @@ type DirFileInfo interface {
 
 type AssetInterface interface {
 	Name() string
-	Data() ([]byte, error)
-	DataS() (string, error)
-	MustData() []byte
-	MustDataS() string
 	Path() string
+	Reader() (io.ReadCloser, error)
 }
 
 type AssetGetterInterface interface {
@@ -122,4 +110,8 @@ type PathRegistrator interface {
 type NameSpacedInterface interface {
 	Interface
 	GetName() string
+}
+
+type RawReadGetter interface {
+	RawReader() io.ReadCloser
 }

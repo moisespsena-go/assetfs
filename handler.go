@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 
-	iocommon "github.com/moisespsena-go/io-common"
-
 	"github.com/moisespsena-go/assetfs/assetfsapi"
+	"github.com/moisespsena-go/httpu"
 )
 
 var cacheSince = time.Now()
@@ -27,6 +26,7 @@ type StaticHandler struct {
 		sum  []byte
 	}
 	etagMu sync.RWMutex
+	gziped bool
 }
 
 func (this *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -94,14 +94,21 @@ func (this *StaticHandler) ServeAsset(w http.ResponseWriter, r *http.Request, pt
 	pth = strings.TrimPrefix(pth, "/")
 
 	if asset, err := this.FS.AssetInfoC(r.Context(), pth); err == nil {
-		var rs iocommon.ReadSeekCloser
-		if rs, err = asset.Reader(); err != nil {
+		var rc io.ReadCloser
+		if rc, err = asset.Reader(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer rs.Close()
-
-		http.ServeContent(w, r, path.Base(pth), cacheSince, rs)
+		defer rc.Close()
+		if cmpr, ok := rc.(Compresseder); ok && cmpr.Compressed() {
+			httpu.ServeContent(w, r, path.Base(pth), cacheSince, rc, func() (int64, error) {
+				return asset.Size(), nil
+			})
+		} else {
+			httpu.ServeContent(w, r, path.Base(pth), cacheSince, struct {
+				io.ReadCloser
+			}{rc}, nil)
+		}
 		return
 	}
 

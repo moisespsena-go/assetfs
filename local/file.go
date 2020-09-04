@@ -10,8 +10,6 @@ import (
 	api "github.com/moisespsena-go/assetfs/assetfsapi"
 
 	"fmt"
-
-	"github.com/moisespsena-go/io-common"
 )
 
 type FileInfo = api.BasicFileInfo
@@ -19,7 +17,7 @@ type FileInfo = api.BasicFileInfo
 type File struct {
 	FileInfo
 	realPath string
-	reader   func() (iocommon.ReadSeekCloser, error)
+	reader   func() (io.ReadCloser, error)
 	digest   *[sha256.Size]byte
 }
 
@@ -43,7 +41,7 @@ func (f *File) RealPath() string {
 	return f.realPath
 }
 
-func NewFile(fileInfo FileInfo, reader func() (iocommon.ReadSeekCloser, error), digest *[sha256.Size]byte) *File {
+func NewFile(fileInfo FileInfo, reader func() (io.ReadCloser, error), digest *[sha256.Size]byte) *File {
 	return &File{FileInfo: fileInfo, reader: reader, digest: digest}
 }
 
@@ -61,14 +59,19 @@ func (f *File) ImportLocal(localPath, name string, info os.FileInfo) (err error)
 	return
 }
 
-func (f *File) Reader() (iocommon.ReadSeekCloser, error) {
+func (f *File) Reader() (io.ReadCloser, error) {
 	if f.reader == nil {
-		if i, ok := f.FileInfo.(api.RFileInfo); ok {
-			return i.Reader()
-		}
 		return os.Open(f.realPath)
 	}
 	return f.reader()
+}
+
+func (f *File) Open() (io.Reader, error) {
+	r, err := f.Reader()
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 func (f *File) Digest() (d [sha256.Size]byte) {

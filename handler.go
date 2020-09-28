@@ -30,7 +30,7 @@ type StaticHandler struct {
 }
 
 func (this *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	this.ServeAsset(w, r, r.URL.Path, true)
+	this.ServeAsset(w, r, r.URL.Path)
 }
 
 func NewStaticHandler(fs assetfsapi.Interface) *StaticHandler {
